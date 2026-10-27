@@ -4,11 +4,11 @@ ROS implementation of SLAM system
 
 ## Learning Example
 
-A simple multi-node ROS 2 example is available in the `simple_nodes_demo/` folder.
+The `battery_node_demo/` directory contains two independent ROS 2 packages:
 
-It contains:
-- 2 Python nodes (publisher + processor)
-- 1 C++ node (listener)
-- Detailed learning notes explaining every concept
+- `battery_python`: Python publisher and processor.
+- `battery_cpp`: C++ listener.
 
-See [`simple_nodes_demo/README.md`](simple_nodes_demo/README.md) and [`simple_nodes_demo/LEARNING_NOTES.md`](simple_nodes_demo/LEARNING_NOTES.md) to get started.
+The repository root is the ROS 2 workspace root.
+
+See [battery_node_demo/README.md](battery_node_demo/README.md) and [battery_node_demo/LEARNING_NOTES.md](battery_node_demo/LEARNING_NOTES.md) for build instructions and explanations.

@@ -1,0 +1,8 @@
+# ROS 2 workspace outputs
+/build/
+/install/
+/log/
+
+# Python-generated files
+__pycache__/
+*.pyc
