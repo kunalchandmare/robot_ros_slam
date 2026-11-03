@@ -5,6 +5,12 @@
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/ros2-dev,type=bind",
   "workspaceFolder": "/workspaces/ros2-dev",
+  "runArgs": [
+    "--net=host"
+  ],
+  "containerEnv": {
+    "DISPLAY": ":0"
+  },
   "customizations": {
     "vscode": {
       "extensions": [

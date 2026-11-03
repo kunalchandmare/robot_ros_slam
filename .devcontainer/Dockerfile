@@ -10,6 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-demo-nodes-cpp \
     ros-humble-demo-nodes-py \
     ros-humble-std-msgs \
+    ros-humble-rqt-graph \
+    ros-humble-rqt-common-plugins \
+    libqt5gui5 \
+    libxcb-xinerama0 \
+    libxkbcommon-x11-0 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc
