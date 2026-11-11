@@ -9,7 +9,9 @@
     "--net=host"
   ],
   "containerEnv": {
-    "DISPLAY": ":0"
+    "DISPLAY": "host.docker.internal:0",
+    "QT_X11_NO_MITSHM": "1",
+    "LIBGL_ALWAYS_SOFTWARE": "1"
   },
   "customizations": {
     "vscode": {
