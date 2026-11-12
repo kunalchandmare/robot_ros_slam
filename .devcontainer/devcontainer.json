@@ -9,10 +9,16 @@
     "--net=host"
   ],
   "containerEnv": {
-    "DISPLAY": "host.docker.internal:0",
-    "QT_X11_NO_MITSHM": "1",
-    "LIBGL_ALWAYS_SOFTWARE": "1"
+    "DISPLAY": ":0",
+    "WAYLAND_DISPLAY": "wayland-0",
+    "XDG_RUNTIME_DIR": "/mnt/wslg/runtime-dir",
+    "PULSE_SERVER": "/mnt/wslg/PulseServer",
+    "QT_X11_NO_MITSHM": "1"
   },
+  "mounts": [
+    "source=/run/desktop/mnt/host/wslg/.X11-unix,target=/tmp/.X11-unix,type=bind",
+    "source=/run/desktop/mnt/host/wslg,target=/mnt/wslg,type=bind"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [
