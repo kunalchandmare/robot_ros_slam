@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Navigation & simulation (optional but useful)
     ros-humble-nav2-bringup \
     ros-humble-turtlebot3* \
-    ros-humble-gazebo-ros-pkgs \
+    ros-humble-ros-gz \
     # GUI / Qt dependencies (helps with RViz / rtabmap_viz)
     libqt5gui5 \
     libxcb-xinerama0 \
