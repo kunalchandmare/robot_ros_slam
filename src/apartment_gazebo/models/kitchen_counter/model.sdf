@@ -1,0 +1,26 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <model name="kitchen_counter">
+    <static>true</static>
+    <pose>0 0 0 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <box><size>0.6 2.4 0.9</size></box>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <box><size>0.6 2.4 0.9</size></box>
+        </geometry>
+        <material>
+          <ambient>0.7 0.7 0.68 1</ambient>
+          <diffuse>0.9 0.9 0.88 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

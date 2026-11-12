@@ -1,0 +1,415 @@
+<?xml version="1.0"?>
+<!--
+  Stereo Eye - a cute 2-wheel differential-drive mapping robot.
+  Single stereo camera "eye" (63 mm baseline, 1280x720 per eye @ 30 fps) for RTAB-Map stereo SLAM.
+
+  Frames (REP-105 / REP-103):
+    base_footprint -> base_link -> {left,right}_wheel_link (continuous)
+                                -> caster_link (fixed)
+                                -> imu_link (fixed)
+                                -> head_link (fixed) -> camera_link -> camera_{left,right}_link
+                                                                    -> camera_{left,right}_optical_frame
+  Visuals use primitives only (box / cylinder / sphere) so no meshes are needed.
+-->
+<robot name="stereo_eye" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="use_gazebo" default="true"/>
+
+  <!-- ===================== PROPERTIES ===================== -->
+  <xacro:property name="PI" value="3.14159265358979"/>
+
+  <!-- Wheels -->
+  <xacro:property name="wheel_radius"     value="0.065"/>
+  <xacro:property name="wheel_width"      value="0.030"/>
+  <xacro:property name="wheel_mass"       value="0.25"/>
+  <xacro:property name="wheel_separation" value="0.190"/>   <!-- centre-to-centre -->
+
+  <!-- Torso (chunky rounded box). base_link sits on the wheel axle. -->
+  <xacro:property name="torso_x"      value="0.140"/>  <!-- depth -->
+  <xacro:property name="torso_y"      value="0.150"/>  <!-- width -->
+  <xacro:property name="torso_z"      value="0.150"/>  <!-- height -->
+  <xacro:property name="torso_r"      value="0.025"/>  <!-- corner radius -->
+  <xacro:property name="torso_off_x"  value="-0.020"/>
+  <xacro:property name="ground_clear" value="0.030"/>
+  <xacro:property name="torso_mass"   value="2.20"/>   <!-- incl. battery, SBC, motors -->
+  <!-- torso centre height relative to base_link (axle) -->
+  <xacro:property name="torso_cz" value="${ground_clear + torso_z/2 - wheel_radius}"/>
+  <xacro:property name="torso_top" value="${torso_cz + torso_z/2}"/>
+
+  <!-- Shoulder cap + neck -->
+  <xacro:property name="cap_h"   value="0.010"/>
+  <xacro:property name="neck_r"  value="0.022"/>
+  <xacro:property name="neck_h"  value="0.020"/>
+
+  <!-- Head: wide flat "pill" bar -->
+  <xacro:property name="head_x"     value="0.090"/>   <!-- depth -->
+  <xacro:property name="head_core_y" value="0.150"/>  <!-- flat middle part -->
+  <xacro:property name="head_z"     value="0.095"/>   <!-- height; ends are cylinders r=head_z/2 -->
+  <xacro:property name="head_off_x" value="0.000"/>
+  <xacro:property name="head_mass"  value="0.35"/>
+  <xacro:property name="head_cz"    value="${torso_top + cap_h + neck_h + head_z/2}"/>
+
+  <!-- Eye / stereo camera -->
+  <xacro:property name="eye_z"         value="0.005"/>   <!-- eye centre above head centre -->
+  <xacro:property name="bezel_r"       value="0.044"/>
+  <xacro:property name="bezel_len"     value="0.012"/>
+  <xacro:property name="glass_r"       value="0.039"/>
+  <xacro:property name="lens_r"        value="0.0065"/>
+  <xacro:property name="stereo_baseline" value="0.063"/>  <!-- ZED-Mini-like -->
+  <xacro:property name="cam_w"   value="1280"/>
+  <xacro:property name="cam_h"   value="720"/>
+  <xacro:property name="cam_fps" value="30"/>
+  <xacro:property name="cam_hfov" value="1.6"/>          <!-- rad (~91.7 deg) -->
+  <xacro:property name="cam_fx" value="${(cam_w/2.0) / tan(cam_hfov/2.0)}"/>
+  <xacro:property name="cam_mass" value="0.06"/>
+  <xacro:property name="cam_front_x" value="${head_x/2 + bezel_len - 0.002 + 0.006}"/>
+
+  <!-- Caster ball (rear) -->
+  <xacro:property name="caster_r"    value="0.0175"/>
+  <xacro:property name="caster_x"    value="-0.075"/>
+  <xacro:property name="caster_mass" value="0.05"/>
+
+  <!-- ===================== MATERIALS ===================== -->
+  <material name="se_white"><color rgba="0.96 0.96 0.97 1.0"/></material>
+  <material name="se_light_grey"><color rgba="0.80 0.82 0.85 1.0"/></material>
+  <material name="se_blue"><color rgba="0.12 0.47 0.95 1.0"/></material>
+  <material name="se_sky"><color rgba="0.45 0.75 1.00 1.0"/></material>
+  <material name="se_dark"><color rgba="0.10 0.11 0.14 1.0"/></material>
+  <material name="se_glass"><color rgba="0.03 0.05 0.10 1.0"/></material>
+  <material name="se_tire"><color rgba="0.18 0.19 0.22 1.0"/></material>
+  <material name="se_blush"><color rgba="1.00 0.55 0.65 1.0"/></material>
+
+  <!-- ===================== INERTIAL MACROS ===================== -->
+  <xacro:macro name="box_inertial" params="m x y z *origin">
+    <inertial>
+      <xacro:insert_block name="origin"/>
+      <mass value="${m}"/>
+      <inertia ixx="${m*(y*y+z*z)/12.0}" ixy="0" ixz="0"
+               iyy="${m*(x*x+z*z)/12.0}" iyz="0"
+               izz="${m*(x*x+y*y)/12.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- solid cylinder, axis along local z -->
+  <xacro:macro name="cylinder_inertial" params="m r h *origin">
+    <inertial>
+      <xacro:insert_block name="origin"/>
+      <mass value="${m}"/>
+      <inertia ixx="${m*(3*r*r+h*h)/12.0}" ixy="0" ixz="0"
+               iyy="${m*(3*r*r+h*h)/12.0}" iyz="0"
+               izz="${m*r*r/2.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="sphere_inertial" params="m r *origin">
+    <inertial>
+      <xacro:insert_block name="origin"/>
+      <mass value="${m}"/>
+      <inertia ixx="${2.0*m*r*r/5.0}" ixy="0" ixz="0"
+               iyy="${2.0*m*r*r/5.0}" iyz="0"
+               izz="${2.0*m*r*r/5.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- ===================== VISUAL HELPER MACROS ===================== -->
+  <!-- Box with rounded vertical edges (2 crossed boxes + 4 corner cylinders) -->
+  <xacro:macro name="rounded_box_visual" params="name x y z r cx cy cz mat">
+    <visual name="${name}_a">
+      <origin xyz="${cx} ${cy} ${cz}" rpy="0 0 0"/>
+      <geometry><box size="${x - 2*r} ${y} ${z}"/></geometry>
+      <material name="${mat}"/>
+    </visual>
+    <visual name="${name}_b">
+      <origin xyz="${cx} ${cy} ${cz}" rpy="0 0 0"/>
+      <geometry><box size="${x} ${y - 2*r} ${z}"/></geometry>
+      <material name="${mat}"/>
+    </visual>
+    <xacro:rounded_corner name="${name}_c1" px="${cx + x/2 - r}" py="${cy + y/2 - r}" pz="${cz}" r="${r}" h="${z}" mat="${mat}"/>
+    <xacro:rounded_corner name="${name}_c2" px="${cx + x/2 - r}" py="${cy - y/2 + r}" pz="${cz}" r="${r}" h="${z}" mat="${mat}"/>
+    <xacro:rounded_corner name="${name}_c3" px="${cx - x/2 + r}" py="${cy + y/2 - r}" pz="${cz}" r="${r}" h="${z}" mat="${mat}"/>
+    <xacro:rounded_corner name="${name}_c4" px="${cx - x/2 + r}" py="${cy - y/2 + r}" pz="${cz}" r="${r}" h="${z}" mat="${mat}"/>
+  </xacro:macro>
+
+  <xacro:macro name="rounded_corner" params="name px py pz r h mat">
+    <visual name="${name}">
+      <origin xyz="${px} ${py} ${pz}" rpy="0 0 0"/>
+      <geometry><cylinder radius="${r}" length="${h}"/></geometry>
+      <material name="${mat}"/>
+    </visual>
+  </xacro:macro>
+
+  <!-- Disc facing +x (cylinder rotated about y) -->
+  <xacro:macro name="front_disc" params="name x y z r t mat">
+    <visual name="${name}">
+      <origin xyz="${x} ${y} ${z}" rpy="0 ${PI/2} 0"/>
+      <geometry><cylinder radius="${r}" length="${t}"/></geometry>
+      <material name="${mat}"/>
+    </visual>
+  </xacro:macro>
+
+  <xacro:macro name="vbox" params="name x y z sx sy sz mat">
+    <visual name="${name}">
+      <origin xyz="${x} ${y} ${z}" rpy="0 0 0"/>
+      <geometry><box size="${sx} ${sy} ${sz}"/></geometry>
+      <material name="${mat}"/>
+    </visual>
+  </xacro:macro>
+
+  <!-- ===================== WHEEL MACRO ===================== -->
+  <!-- reflect = +1 for left, -1 for right -->
+  <xacro:macro name="drive_wheel" params="prefix reflect">
+    <link name="${prefix}_wheel_link">
+      <visual name="tire">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+        <material name="se_tire"/>
+      </visual>
+      <visual name="hub">
+        <origin xyz="0 0 ${reflect*0.001}" rpy="0 0 0"/>
+        <geometry><cylinder radius="${wheel_radius*0.55}" length="${wheel_width}"/></geometry>
+        <material name="se_blue"/>
+      </visual>
+      <visual name="hub_cap">
+        <origin xyz="0 0 ${reflect*0.002}" rpy="0 0 0"/>
+        <geometry><cylinder radius="${wheel_radius*0.22}" length="${wheel_width}"/></geometry>
+        <material name="se_white"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+      </collision>
+      <xacro:cylinder_inertial m="${wheel_mass}" r="${wheel_radius}" h="${wheel_width}">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </xacro:cylinder_inertial>
+    </link>
+
+    <!-- link z-axis = wheel axle; rotate so +z points along +y (left), joint axis z -->
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${prefix}_wheel_link"/>
+      <origin xyz="0 ${reflect*wheel_separation/2} 0" rpy="${-PI/2} 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit effort="2.0" velocity="15.0"/>
+      <dynamics damping="0.01" friction="0.0"/>
+    </joint>
+
+    <gazebo reference="${prefix}_wheel_link">
+      <mu1>1.0</mu1>
+      <mu2>1.0</mu2>
+      <kp>1000000.0</kp>
+      <kd>100.0</kd>
+      <minDepth>0.001</minDepth>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- Camera eye link + its REP-103 optical frame -->
+  <xacro:macro name="stereo_eye" params="side reflect">
+    <link name="camera_${side}_link"/>
+    <joint name="camera_${side}_joint" type="fixed">
+      <parent link="camera_link"/>
+      <child link="camera_${side}_link"/>
+      <origin xyz="0 ${reflect*stereo_baseline/2} 0" rpy="0 0 0"/>
+    </joint>
+    <link name="camera_${side}_optical_frame"/>
+    <joint name="camera_${side}_optical_joint" type="fixed">
+      <parent link="camera_${side}_link"/>
+      <child link="camera_${side}_optical_frame"/>
+      <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- ===================== LINKS & JOINTS ===================== -->
+  <link name="base_footprint"/>
+
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="base_link">
+    <!-- Torso shell (white, rounded) -->
+    <xacro:rounded_box_visual name="torso" x="${torso_x}" y="${torso_y}" z="${torso_z}" r="${torso_r}"
+                              cx="${torso_off_x}" cy="0" cz="${torso_cz}" mat="se_white"/>
+    <!-- Blue bumper band at the bottom -->
+    <xacro:rounded_box_visual name="bumper" x="${torso_x + 0.006}" y="${torso_y + 0.006}" z="0.018" r="${torso_r + 0.003}"
+                              cx="${torso_off_x}" cy="0" cz="${torso_cz - torso_z/2 + 0.012}" mat="se_blue"/>
+    <!-- Blue accent band near the top (the "collar") -->
+    <xacro:rounded_box_visual name="collar" x="${torso_x + 0.004}" y="${torso_y + 0.004}" z="0.012" r="${torso_r + 0.002}"
+                              cx="${torso_off_x}" cy="0" cz="${torso_top - 0.022}" mat="se_blue"/>
+    <!-- Front chest panel (light grey) with vents -->
+    <xacro:vbox name="chest_panel" x="${torso_off_x + torso_x/2 + 0.002}" y="0" z="${torso_cz - 0.008}"
+                sx="0.004" sy="0.090" sz="0.070" mat="se_light_grey"/>
+    <xacro:vbox name="vent_1" x="${torso_off_x + torso_x/2 + 0.0045}" y="0" z="${torso_cz + 0.012}" sx="0.002" sy="0.064" sz="0.006" mat="se_dark"/>
+    <xacro:vbox name="vent_2" x="${torso_off_x + torso_x/2 + 0.0045}" y="0" z="${torso_cz - 0.000}" sx="0.002" sy="0.064" sz="0.006" mat="se_dark"/>
+    <xacro:vbox name="vent_3" x="${torso_off_x + torso_x/2 + 0.0045}" y="0" z="${torso_cz - 0.012}" sx="0.002" sy="0.064" sz="0.006" mat="se_dark"/>
+    <!-- Blue vertical accent stripes either side of the chest panel -->
+    <xacro:vbox name="stripe_l" x="${torso_off_x + torso_x/2 + 0.002}" y="0.054" z="${torso_cz - 0.008}" sx="0.004" sy="0.008" sz="0.070" mat="se_blue"/>
+    <xacro:vbox name="stripe_r" x="${torso_off_x + torso_x/2 + 0.002}" y="-0.054" z="${torso_cz - 0.008}" sx="0.004" sy="0.008" sz="0.070" mat="se_blue"/>
+    <!-- Little heart/status light under the vents -->
+    <xacro:front_disc name="status_led" x="${torso_off_x + torso_x/2 + 0.005}" y="0" z="${torso_cz - 0.030}" r="0.007" t="0.003" mat="se_sky"/>
+    <!-- Shoulder cap (light grey) and neck -->
+    <xacro:rounded_box_visual name="cap" x="${torso_x - 0.020}" y="${torso_y - 0.020}" z="${cap_h}" r="${torso_r - 0.008}"
+                              cx="${torso_off_x}" cy="0" cz="${torso_top + cap_h/2}" mat="se_light_grey"/>
+    <visual name="neck">
+      <origin xyz="${head_off_x} 0 ${torso_top + cap_h + neck_h/2}" rpy="0 0 0"/>
+      <geometry><cylinder radius="${neck_r}" length="${neck_h + 0.004}"/></geometry>
+      <material name="se_blue"/>
+    </visual>
+    <!-- Caster housing -->
+    <visual name="caster_housing">
+      <origin xyz="${caster_x} 0 ${torso_cz - torso_z/2 - 0.004}" rpy="0 0 0"/>
+      <geometry><cylinder radius="${caster_r + 0.004}" length="0.010"/></geometry>
+      <material name="se_light_grey"/>
+    </visual>
+
+    <collision name="torso_collision">
+      <origin xyz="${torso_off_x} 0 ${torso_cz}" rpy="0 0 0"/>
+      <geometry><box size="${torso_x} ${torso_y} ${torso_z}"/></geometry>
+    </collision>
+
+    <!-- Torso mass incl. battery: COM placed low and slightly rearward for caster stability -->
+    <xacro:box_inertial m="${torso_mass}" x="${torso_x}" y="${torso_y}" z="${torso_z}">
+      <origin xyz="${torso_off_x - 0.010} 0 ${torso_cz - 0.030}" rpy="0 0 0"/>
+    </xacro:box_inertial>
+  </link>
+
+  <!-- Drive wheels -->
+  <xacro:drive_wheel prefix="left"  reflect="1"/>
+  <xacro:drive_wheel prefix="right" reflect="-1"/>
+
+  <!-- Rear caster ball -->
+  <link name="caster_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><sphere radius="${caster_r}"/></geometry>
+      <material name="se_dark"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><sphere radius="${caster_r}"/></geometry>
+    </collision>
+    <xacro:sphere_inertial m="${caster_mass}" r="${caster_r}">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:sphere_inertial>
+  </link>
+  <joint name="caster_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="caster_link"/>
+    <origin xyz="${caster_x} 0 ${caster_r - wheel_radius}" rpy="0 0 0"/>
+  </joint>
+  <gazebo reference="caster_link">
+    <mu1>0.0</mu1>
+    <mu2>0.0</mu2>
+    <kp>1000000.0</kp>
+    <kd>100.0</kd>
+  </gazebo>
+
+  <!-- IMU (centre of the torso, on the axle line) -->
+  <link name="imu_link"/>
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 ${torso_cz - 0.03}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Head: wide flat pill-shaped bar -->
+  <link name="head_link">
+    <visual name="head_core">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="${head_x} ${head_core_y} ${head_z}"/></geometry>
+      <material name="se_white"/>
+    </visual>
+    <visual name="head_end_l">
+      <origin xyz="0 ${head_core_y/2} 0" rpy="0 ${PI/2} 0"/>
+      <geometry><cylinder radius="${head_z/2}" length="${head_x}"/></geometry>
+      <material name="se_white"/>
+    </visual>
+    <visual name="head_end_r">
+      <origin xyz="0 ${-head_core_y/2} 0" rpy="0 ${PI/2} 0"/>
+      <geometry><cylinder radius="${head_z/2}" length="${head_x}"/></geometry>
+      <material name="se_white"/>
+    </visual>
+    <!-- blue "ear" lights on the sides -->
+    <visual name="ear_l">
+      <origin xyz="0 ${head_core_y/2 + head_z/2} 0" rpy="${PI/2} 0 0"/>
+      <geometry><cylinder radius="0.026" length="0.010"/></geometry>
+      <material name="se_blue"/>
+    </visual>
+    <visual name="ear_r">
+      <origin xyz="0 ${-(head_core_y/2 + head_z/2)} 0" rpy="${PI/2} 0 0"/>
+      <geometry><cylinder radius="0.026" length="0.010"/></geometry>
+      <material name="se_blue"/>
+    </visual>
+    <!-- blue brow stripe on the head top -->
+    <xacro:vbox name="brow" x="0.012" y="0" z="${head_z/2 + 0.0015}" sx="0.040" sy="0.110" sz="0.003" mat="se_blue"/>
+    <!-- big round eye: white bezel ring, blue rim, dark glass, two stereo lenses, sparkle -->
+    <xacro:front_disc name="eye_rim"   x="${head_x/2 + 0.002}" y="0" z="${eye_z}" r="${bezel_r + 0.004}" t="0.006" mat="se_blue"/>
+    <xacro:front_disc name="eye_bezel" x="${head_x/2 + bezel_len/2 - 0.002}" y="0" z="${eye_z}" r="${bezel_r}" t="${bezel_len}" mat="se_light_grey"/>
+    <xacro:front_disc name="eye_glass" x="${head_x/2 + bezel_len - 0.002 + 0.0015}" y="0" z="${eye_z}" r="${glass_r}" t="0.003" mat="se_glass"/>
+    <xacro:front_disc name="lens_l" x="${head_x/2 + bezel_len - 0.002 + 0.0035}" y="${stereo_baseline/2}" z="${eye_z}" r="${lens_r}" t="0.003" mat="se_sky"/>
+    <xacro:front_disc name="lens_r" x="${head_x/2 + bezel_len - 0.002 + 0.0035}" y="${-stereo_baseline/2}" z="${eye_z}" r="${lens_r}" t="0.003" mat="se_sky"/>
+    <visual name="eye_sparkle">
+      <origin xyz="${head_x/2 + bezel_len - 0.002 + 0.003} -0.012 ${eye_z + 0.020}" rpy="0 0 0"/>
+      <geometry><sphere radius="0.0055"/></geometry>
+      <material name="se_white"/>
+    </visual>
+    <!-- blush cheeks -->
+    <xacro:front_disc name="cheek_l" x="${head_x/2 + 0.001}" y="0.060" z="-0.026" r="0.011" t="0.003" mat="se_blush"/>
+    <xacro:front_disc name="cheek_r" x="${head_x/2 + 0.001}" y="-0.060" z="-0.026" r="0.011" t="0.003" mat="se_blush"/>
+    <!-- twin antennas with blue bobbles -->
+    <visual name="antenna_l">
+      <origin xyz="-0.010 0.050 ${head_z/2 + 0.013}" rpy="-0.30 0 0"/>
+      <geometry><cylinder radius="0.003" length="0.026"/></geometry>
+      <material name="se_light_grey"/>
+    </visual>
+    <visual name="antenna_l_tip">
+      <origin xyz="-0.010 ${0.050 + 0.005} ${head_z/2 + 0.029}" rpy="0 0 0"/>
+      <geometry><sphere radius="0.008"/></geometry>
+      <material name="se_blue"/>
+    </visual>
+    <visual name="antenna_r">
+      <origin xyz="-0.010 -0.050 ${head_z/2 + 0.013}" rpy="0.30 0 0"/>
+      <geometry><cylinder radius="0.003" length="0.026"/></geometry>
+      <material name="se_light_grey"/>
+    </visual>
+    <visual name="antenna_r_tip">
+      <origin xyz="-0.010 ${-0.050 - 0.005} ${head_z/2 + 0.029}" rpy="0 0 0"/>
+      <geometry><sphere radius="0.008"/></geometry>
+      <material name="se_blue"/>
+    </visual>
+
+    <collision name="head_collision">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="${head_x} ${head_core_y + head_z} ${head_z}"/></geometry>
+    </collision>
+    <xacro:box_inertial m="${head_mass}" x="${head_x}" y="${head_core_y + head_z}" z="${head_z}">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:box_inertial>
+  </link>
+  <joint name="head_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="head_link"/>
+    <origin xyz="${head_off_x} 0 ${head_cz}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Stereo camera body (centre between the two lenses, at the glass) -->
+  <link name="camera_link">
+    <xacro:box_inertial m="${cam_mass}" x="0.025" y="0.090" z="0.030">
+      <origin xyz="-0.012 0 0" rpy="0 0 0"/>
+    </xacro:box_inertial>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="head_link"/>
+    <child link="camera_link"/>
+    <origin xyz="${cam_front_x} 0 ${eye_z}" rpy="0 0 0"/>
+  </joint>
+  <xacro:stereo_eye side="left"  reflect="1"/>
+  <xacro:stereo_eye side="right" reflect="-1"/>
+
+  <!-- ===================== GAZEBO (Harmonic / gz-sim 8) ===================== -->
+  <xacro:if value="$(arg use_gazebo)">
+    <xacro:include filename="stereo_eye.gazebo.xacro"/>
+  </xacro:if>
+
+</robot>

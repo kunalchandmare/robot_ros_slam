@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>stereo_eye</name>
+  <version>0.1.0</version>
+  <description>Robot description (model only) of Stereo Eye: a cute 2-wheel differential-drive robot with a single stereo-camera eye (1280x720 per eye), built for RTAB-Map stereo mapping. URDF/Xacro with primitive geometry only.</description>
+  <maintainer email="kunal@example.com">Kunal</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <build_depend>xacro</build_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
