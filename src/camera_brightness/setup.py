@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'camera_brightness_publisher'
+package_name = 'camera_brightness'
 
 setup(
     name=package_name,
@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'camera_brightness_publisher = camera_brightness_publisher.camera_brighness_publisher:main',
+            'camera_brightness = camera_brightness.camera_brightness_publisher:main',
         ],
     },
 )

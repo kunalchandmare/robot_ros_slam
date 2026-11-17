@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>camera_brightness_publisher</name>
+  <name>camera_brightness</name>
   <version>0.1.0</version>
   <description>Python camera brightness publisher node</description>
   <maintainer email="kunal@example.com">Kunal Chandmare</maintainer>

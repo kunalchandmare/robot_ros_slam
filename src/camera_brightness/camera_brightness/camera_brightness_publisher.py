@@ -4,21 +4,46 @@ import cv2
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
-
+from rclpy.executors import ExternalShutdownException
+import time
+from rclpy.qos import qos_profile_sensor_data
 
 class CameraBrightnessPublisher(Node):
     def __init__(self):
         super().__init__('camera_brightness_publisher')
 
+        self.brightness = 0.0
+        self.last_image_time = None
+        self.image_timeout = 1.0  # Seconds without a valid image
+
         self.subscriber_ = self.create_subscription(
             Image,
-            'camera/image',
-            self.image_callback,
-            10
+            '/image',
+            self.image_callback,10
+            #qos_profile_sensor_data
         )
-        self.brightness = 0.0
-                
+
+        timer_period = 0.5  # seconds                
         self.publisher_ = self.create_publisher(String, 'camera_brightness', 10)
+        self.timer = self.create_timer(timer_period, self.timer_callback)
+
+    def timer_callback(self):
+        no_recent_image = (
+            self.last_image_time is None
+            or time.monotonic() - self.last_image_time > self.image_timeout
+        )
+
+        if no_recent_image:
+            brightness = 0.0
+            self.get_logger().warning(
+                'No valid image received within 1 second; publishing 0.'
+            )
+        else:
+            brightness = self.brightness
+
+        msg = String()
+        msg.data = f'Current Brightness: {brightness:.2f}'
+        self.publisher_.publish(msg)
 
     @staticmethod
     def calculate_brightness(image: Image) -> float:
@@ -61,11 +86,35 @@ class CameraBrightnessPublisher(Node):
     def image_callback(self, msg: Image) -> None:
             try:
                 self.brightness = self.calculate_brightness(msg)
+                self.last_image_time = time.monotonic()
+
+                self.get_logger().info(
+                    f'Image recieving: {msg.width}x{msg.height}, '
+                    f'brightness={self.brightness:.4f}'
+                )
+
             except ValueError as error:
                 self.get_logger().warning(f'Could not calculate image brightness: {error}')
                 return
 
-            brightness_msg = String()
-            brightness_msg.data = str(self.brightness)
-            
-            self.publisher_.publish(brightness_msg)
+def main(args=None):
+    rclpy.init(args=args)
+    node = None
+
+    try:
+        node = CameraBrightnessPublisher()
+        rclpy.spin(node)
+
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+
+    finally:
+        if node is not None:
+            node.destroy_node()
+
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
