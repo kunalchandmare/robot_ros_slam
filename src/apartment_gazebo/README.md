@@ -1,8 +1,8 @@
 # apartment_gazebo
 
-A simple **10 m × 8 m** indoor apartment for mobile-robot navigation in
-Gazebo Sim (Fortress, the version ROS 2 Humble uses, plus Garden and Harmonic) and
-Gazebo Classic (geometry only).
+A simple **10 m × 8 m** indoor apartment for mobile-robot navigation, made
+for ROS 2 Humble with Gazebo Fortress. It also loads in Garden and Harmonic,
+and in Gazebo Classic (geometry only).
 Outer walls are closed. Interior doorways are empty gaps (no door meshes),
 wide enough for a TurtleBot- or Husky-sized robot. A few static furniture
 boxes act as obstacles; doorways and corridors stay clear (≥ 0.8 m).
@@ -99,43 +99,49 @@ yaw = 0.0 rad    # facing +X, toward the kitchen opening
 
 ## Build and launch
 
-Put this package in a ROS 2 workspace, then:
+This package lives in the `src/` folder of the ROS 2 Humble workspace at
+`/workspaces/ros2-dev` (the repo root is the workspace). Build it there:
 
 ```bash
-cd /path/to/ws
+cd /workspaces/ros2-dev
 colcon build --packages-select apartment_gazebo
 source install/setup.bash
 ```
 
 Sourcing the workspace is what applies the model-path hook. After that,
-launch the world with Gazebo Sim / Harmonic:
+launch the world with Gazebo Fortress (the version that comes with Humble):
+
+```bash
+ign gazebo $(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
+```
+
+Or through `ros_gz_sim` (on Humble this starts Fortress too):
+
+```bash
+ros2 launch ros_gz_sim gz_sim.launch.py gz_args:=$(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
+```
+
+On Gazebo Garden or Harmonic (not the Humble setup), use `gz sim` instead:
 
 ```bash
 gz sim $(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
 ```
 
-Or through `ros_gz_sim`:
+Gazebo Classic alternative (geometry only; also uses `GAZEBO_MODEL_PATH` from the hook):
 
 ```bash
-ros2 launch ros_gz_sim gz_sim.launch.py   gz_args:=$(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
-```
-
-Gazebo Classic alternative (also uses `GAZEBO_MODEL_PATH` from the hook):
-
-```bash
-gazebo $(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
-# or
 gazebo --verbose $(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
 ```
 
-To spawn a robot at the suggested living-room pose with `ros_gz_sim`:
+To spawn a robot at the suggested living-room pose with `ros_gz_sim`
+(replace `<robot.sdf>` with your robot's SDF or URDF file):
 
 ```bash
-ros2 run ros_gz_sim create -file /path/to/robot.sdf -name robot   -x 4.00 -y 5.50 -z 0.05 -Y 0.0
+ros2 run ros_gz_sim create -file <robot.sdf> -name robot -x 4.00 -y 5.50 -z 0.05 -Y 0.0
 ```
 
 With `gazebo_ros` on Gazebo Classic:
 
 ```bash
-ros2 run gazebo_ros spawn_entity.py -entity robot -file /path/to/robot.sdf   -x 4.00 -y 5.50 -z 0.05 -Y 0.0
+ros2 run gazebo_ros spawn_entity.py -entity robot -file <robot.sdf> -x 4.00 -y 5.50 -z 0.05 -Y 0.0
 ```
