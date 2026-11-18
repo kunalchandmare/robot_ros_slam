@@ -93,16 +93,17 @@ Visualization Manager:
     - Class: rviz_default_plugins/FocusCamera
     - Class: rviz_default_plugins/Measure
 
-  # Orbit view looking at the robot's spawn point in the living room
+  # Orbit view centred on the robot: odom starts at the spawn pose, so the
+  # robot begins at (0, 0) in the fixed frame (not its Gazebo world position).
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
       Name: Current View
       Target Frame: <Fixed Frame>
-      Distance: 8
+      Distance: 5
       Focal Point:
-        X: 4.0
-        Y: 5.5
+        X: 0.0
+        Y: 0.0
         Z: 0.0
       Pitch: 0.6
       Yaw: 0.785
