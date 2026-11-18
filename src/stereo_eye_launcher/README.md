@@ -14,11 +14,13 @@ actually installs.
 
 ```
 stereo_eye_launcher/
-├── CMakeLists.txt     # ament_cmake, installs launch/ into share/
+├── CMakeLists.txt     # ament_cmake, installs launch/ and rviz/ into share/
 ├── package.xml        # runtime dependencies
 ├── README.md
-└── launch/
-    └── launch.py      # the simulation + RTAB-Map launch file
+├── launch/
+│   └── launch.py      # the simulation + RTAB-Map + RViz launch file
+└── rviz/
+    └── stereo_slam.rviz
 ```
 
 ## Requirements
@@ -30,17 +32,18 @@ stereo_eye_launcher/
 
 ## Build and run
 
+The repo root is the container workspace `/workspaces/ros2-dev`, and the packages
+are already under `src/`. Build and launch from there:
+
 ```bash
-mkdir -p ~/ws/src
-cp -r stereo_eye apartment_gazebo stereo_eye_launcher camera_brightness ~/ws/src/
-cd ~/ws
+cd /workspaces/ros2-dev
 colcon build --packages-up-to stereo_eye_launcher
-source install/setup.bash
+source /workspaces/ros2-dev/install/setup.bash
 ros2 launch stereo_eye_launcher launch.py
 ```
 
-Sourcing `install/setup.bash` is required so `FindPackageShare` can find the robot
-and world packages.
+Sourcing `/workspaces/ros2-dev/install/setup.bash` is required so
+`FindPackageShare` can find the robot and world packages.
 
 ## Launch arguments
 
@@ -52,6 +55,7 @@ and world packages.
 | `y`            | `5.50`                                          | Spawn y position (m)                     |
 | `z`            | `0.05`                                          | Spawn height (m), small drop onto floor  |
 | `yaw`          | `0.0`                                           | Spawn heading (rad), faces +X            |
+| `rviz`         | `true`                                          | Start RViz2 with `stereo_slam.rviz`      |
 
 Example: `ros2 launch stereo_eye_launcher launch.py x:=3.0 y:=4.5 yaw:=1.57`
 
@@ -123,6 +127,47 @@ transform to **stereo_odometry** (`publish_tf` true) and lets **rtabmap** publis
 the bridge remaps it to `/wheel_odom` and does not bridge `/tf`.
 `robot_state_publisher` remains the source of `base_footprint` → camera frames.
 
+## RViz
+
+Do **not** run a bare `rviz2`. A plain RViz session uses wall time, while every
+TF, image, map, and odometry message here is stamped in sim time (`/clock`).
+Its default Fixed Frame is also `map`, which does not exist until `rtabmap`
+publishes the `map` → `odom` transform, so the view stays empty.
+
+RViz starts automatically with this launch file, using
+`rviz/stereo_slam.rviz` and `use_sim_time:=true`. Disable it with
+`rviz:=false`:
+
+```bash
+ros2 launch stereo_eye_launcher launch.py rviz:=false
+```
+
+If you start it manually, load the config and enable sim time:
+
+```bash
+rviz2 -d $(ros2 pkg prefix stereo_eye_launcher)/share/stereo_eye_launcher/rviz/stereo_slam.rviz --ros-args -p use_sim_time:=true
+```
+
+The config uses Fixed Frame `odom` (available as soon as stereo odometry
+publishes TF) and these displays:
+
+| Display     | Topic                      | Notes |
+|-------------|----------------------------|-------|
+| TF          | —                          | Full tree: `odom` → `base_footprint` → cameras; `map` → `odom` once SLAM starts |
+| RobotModel  | `/robot_description`       | Description Source is Topic, durability Transient Local (matches `robot_state_publisher`) |
+| Image       | `/stereo/left/image_raw`   | Reliability Best Effort |
+| Image       | `/stereo/right/image_raw`  | Reliability Best Effort |
+| Map         | `/map`                     | OccupancyGrid from `rtabmap`; durability Transient Local |
+| PointCloud2 | `/cloud_map`               | Assembled 3D map from `rtabmap` |
+| Odometry    | `/odom`                    | Stereo visual odometry (not `/wheel_odom`) |
+
+`/map` and `/cloud_map` are used (not `/rtabmap/map` or `/rtabmap/cloud_map`)
+because `launch.py` starts the `rtabmap` node with no namespace and no remaps
+for those outputs. On Humble `rtabmap_ros` 0.21+ the node publishes the
+relative names `map` (OccupancyGrid) and `cloud_map` (PointCloud2), which
+resolve to `/map` and `/cloud_map`. Older ROS 1 names such as `/rtabmap/grid_map`
+or `proj_map` do not apply here.
+
 ## Quick checks after launch
 
 ```bash
@@ -132,8 +177,10 @@ ros2 topic hz /odom
 ros2 topic echo --once /stereo/right/camera_info --field p   # expect P[3] = -54.96
 ros2 run tf2_ros tf2_echo map base_footprint
 ros2 run teleop_twist_keyboard teleop_twist_keyboard   # drive with /cmd_vel
-rviz2                                                   # view TF, map, and camera images
 ```
+
+Do not start a bare `rviz2` from this list. Use the launch file's RViz node, or
+see the RViz section below if you need to start it by hand.
 
 ## Known limitations
 

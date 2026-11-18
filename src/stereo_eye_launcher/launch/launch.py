@@ -13,6 +13,7 @@ from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
 )
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -78,6 +79,11 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'yaw', default_value='0.0',
             description='Spawn yaw (rad); 0 faces +X toward the kitchen opening',
+        ),
+        DeclareLaunchArgument(
+            'rviz',
+            default_value='true',
+            description='Start RViz2 with the stereo SLAM config if true',
         ),
     ]
 
@@ -243,6 +249,27 @@ def generate_launch_description():
         remappings=[('/image', '/stereo/left/image_raw')],
     )
 
+    # Fixed Frame is odom (exists as soon as stereo_odometry publishes TF).
+    # use_sim_time must be true so Image/TF/Map stamps match /clock. A bare
+    # rviz2 uses wall time and defaults Fixed Frame to map, which is empty
+    # until rtabmap publishes map -> odom.
+    rviz = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        arguments=[
+            '-d',
+            PathJoinSubstitution([
+                FindPackageShare('stereo_eye_launcher'),
+                'rviz',
+                'stereo_slam.rviz',
+            ]),
+        ],
+        parameters=[{'use_sim_time': use_sim_time}],
+        condition=IfCondition(LaunchConfiguration('rviz')),
+    )
+
     return LaunchDescription(declared_args + [
         set_ign_resource_path,
         set_resource_path,
@@ -254,4 +281,5 @@ def generate_launch_description():
         stereo_odometry,
         rtabmap,
         camera_brightness,
+        rviz,
     ])
