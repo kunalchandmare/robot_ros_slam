@@ -5,14 +5,18 @@
 <!-- =================================================================================== -->
 <!--
   Stereo Eye - a cute 2-wheel differential-drive mapping robot.
-  Single stereo camera "eye" (63 mm baseline, 1280x720 per eye @ 30 fps) for RTAB-Map stereo SLAM.
+  One "eye" that is a calibrated 2-camera stereo pair (80 mm baseline, 1280x720 per eye @ 15 fps,
+  identical intrinsics) on a rigid stereo bar, for RTAB-Map stereo SLAM and navigation.
+  See ../STEREO_DESIGN.md for the camera design rationale.
 
   Frames (REP-105 / REP-103):
     base_footprint -> base_link -> {left,right}_wheel_link (continuous)
                                 -> caster_link (fixed)
                                 -> imu_link (fixed)
-                                -> head_link (fixed) -> camera_link -> camera_{left,right}_link
-                                                                    -> camera_{left,right}_optical_frame
+                                -> head_link (fixed) -> stereo_bar_link (fixed, rigid stereo bar)
+                                                          -> camera_link (stereo centre)
+                                                          -> camera_left_link  -> camera_left_optical_frame
+                                                          -> camera_right_link -> camera_right_optical_frame
   Visuals use primitives only (box / cylinder / sphere) so no meshes are needed.
 -->
 <robot name="stereo_eye">
@@ -478,59 +482,87 @@
       </geometry>
       <material name="se_blue"/>
     </visual>
-    <visual name="eye_rim">
-      <origin rpy="0 1.570796326794895 0" xyz="0.047 0 0.005"/>
+    <visual name="eye_rim_mid">
+      <origin rpy="0 0 0" xyz="0.047 0 0.005"/>
       <geometry>
-        <cylinder length="0.006" radius="0.048"/>
+        <box size="0.006 0.06 0.078"/>
       </geometry>
       <material name="se_blue"/>
     </visual>
-    <visual name="eye_bezel">
-      <origin rpy="0 1.570796326794895 0" xyz="0.048999999999999995 0 0.005"/>
+    <visual name="eye_rim_l">
+      <origin rpy="0 1.570796326794895 0" xyz="0.047 0.03 0.005"/>
       <geometry>
-        <cylinder length="0.012" radius="0.044"/>
+        <cylinder length="0.006" radius="0.039"/>
+      </geometry>
+      <material name="se_blue"/>
+    </visual>
+    <visual name="eye_rim_r">
+      <origin rpy="0 1.570796326794895 0" xyz="0.047 -0.03 0.005"/>
+      <geometry>
+        <cylinder length="0.006" radius="0.039"/>
+      </geometry>
+      <material name="se_blue"/>
+    </visual>
+    <visual name="eye_bezel_mid">
+      <origin rpy="0 0 0" xyz="0.048999999999999995 0 0.005"/>
+      <geometry>
+        <box size="0.012 0.06 0.07"/>
       </geometry>
       <material name="se_light_grey"/>
     </visual>
-    <visual name="eye_glass">
-      <origin rpy="0 1.570796326794895 0" xyz="0.056499999999999995 0 0.005"/>
+    <visual name="eye_bezel_l">
+      <origin rpy="0 1.570796326794895 0" xyz="0.048999999999999995 0.03 0.005"/>
       <geometry>
-        <cylinder length="0.003" radius="0.039"/>
+        <cylinder length="0.012" radius="0.035"/>
+      </geometry>
+      <material name="se_light_grey"/>
+    </visual>
+    <visual name="eye_bezel_r">
+      <origin rpy="0 1.570796326794895 0" xyz="0.048999999999999995 -0.03 0.005"/>
+      <geometry>
+        <cylinder length="0.012" radius="0.035"/>
+      </geometry>
+      <material name="se_light_grey"/>
+    </visual>
+    <visual name="eye_glass_mid">
+      <origin rpy="0 0 0" xyz="0.056499999999999995 0 0.005"/>
+      <geometry>
+        <box size="0.003 0.06 0.06"/>
       </geometry>
       <material name="se_glass"/>
     </visual>
-    <visual name="lens_l">
-      <origin rpy="0 1.570796326794895 0" xyz="0.058499999999999996 0.0315 0.005"/>
+    <visual name="eye_glass_l">
+      <origin rpy="0 1.570796326794895 0" xyz="0.056499999999999995 0.03 0.005"/>
       <geometry>
-        <cylinder length="0.003" radius="0.0065"/>
+        <cylinder length="0.003" radius="0.03"/>
       </geometry>
-      <material name="se_sky"/>
+      <material name="se_glass"/>
     </visual>
-    <visual name="lens_r">
-      <origin rpy="0 1.570796326794895 0" xyz="0.058499999999999996 -0.0315 0.005"/>
+    <visual name="eye_glass_r">
+      <origin rpy="0 1.570796326794895 0" xyz="0.056499999999999995 -0.03 0.005"/>
       <geometry>
-        <cylinder length="0.003" radius="0.0065"/>
+        <cylinder length="0.003" radius="0.03"/>
       </geometry>
-      <material name="se_sky"/>
+      <material name="se_glass"/>
     </visual>
     <visual name="eye_sparkle">
-      <origin rpy="0 0 0" xyz="0.057999999999999996 -0.012 0.025"/>
+      <origin rpy="0 0 0" xyz="0.057999999999999996 -0.010 0.022000000000000002"/>
       <geometry>
         <sphere radius="0.0055"/>
       </geometry>
       <material name="se_white"/>
     </visual>
     <visual name="cheek_l">
-      <origin rpy="0 1.570796326794895 0" xyz="0.046 0.06 -0.026"/>
+      <origin rpy="0 1.570796326794895 0" xyz="0.046 0.062 -0.038"/>
       <geometry>
-        <cylinder length="0.003" radius="0.011"/>
+        <cylinder length="0.003" radius="0.008"/>
       </geometry>
       <material name="se_blush"/>
     </visual>
     <visual name="cheek_r">
-      <origin rpy="0 1.570796326794895 0" xyz="0.046 -0.06 -0.026"/>
+      <origin rpy="0 1.570796326794895 0" xyz="0.046 -0.062 -0.038"/>
       <geometry>
-        <cylinder length="0.003" radius="0.011"/>
+        <cylinder length="0.003" radius="0.008"/>
       </geometry>
       <material name="se_blush"/>
     </visual>
@@ -580,24 +612,46 @@
     <child link="head_link"/>
     <origin rpy="0 0 0" xyz="0.0 0 0.1925"/>
   </joint>
-  <!-- Stereo camera body (centre between the two lenses, at the glass) -->
-  <link name="camera_link">
+  <!-- Rigid stereo bar: one body carrying both cameras, so the baseline / relative pose never changes.
+       Origin = lens front plane, midway between the two lenses; x forward, y left, z up. -->
+  <link name="stereo_bar_link">
+    <visual name="lens_left">
+      <origin rpy="0 1.570796326794895 0" xyz="-0.0025 0.04 0"/>
+      <geometry>
+        <cylinder length="0.003" radius="0.0075"/>
+      </geometry>
+      <material name="se_sky"/>
+    </visual>
+    <visual name="lens_right">
+      <origin rpy="0 1.570796326794895 0" xyz="-0.0025 -0.04 0"/>
+      <geometry>
+        <cylinder length="0.003" radius="0.0075"/>
+      </geometry>
+      <material name="se_sky"/>
+    </visual>
     <inertial>
-      <origin rpy="0 0 0" xyz="-0.012 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.015 0 0"/>
       <mass value="0.06"/>
-      <inertia ixx="4.499999999999999e-05" ixy="0" ixz="0" iyy="7.625e-06" iyz="0" izz="4.3624999999999997e-05"/>
+      <inertia ixx="6.5e-05" ixy="0" ixz="0" iyy="7.625e-06" iyz="0" izz="6.3625e-05"/>
     </inertial>
   </link>
-  <joint name="camera_joint" type="fixed">
+  <joint name="stereo_bar_joint" type="fixed">
     <parent link="head_link"/>
-    <child link="camera_link"/>
+    <child link="stereo_bar_link"/>
     <origin rpy="0 0 0" xyz="0.06099999999999999 0 0.005"/>
+  </joint>
+  <!-- Stereo-pair centre frame (x forward), kept for drivers/tools that expect camera_link -->
+  <link name="camera_link"/>
+  <joint name="camera_joint" type="fixed">
+    <parent link="stereo_bar_link"/>
+    <child link="camera_link"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
   </joint>
   <link name="camera_left_link"/>
   <joint name="camera_left_joint" type="fixed">
-    <parent link="camera_link"/>
+    <parent link="stereo_bar_link"/>
     <child link="camera_left_link"/>
-    <origin rpy="0 0 0" xyz="0 0.0315 0"/>
+    <origin rpy="0 0 0" xyz="0 0.04 0"/>
   </joint>
   <link name="camera_left_optical_frame"/>
   <joint name="camera_left_optical_joint" type="fixed">
@@ -607,9 +661,9 @@
   </joint>
   <link name="camera_right_link"/>
   <joint name="camera_right_joint" type="fixed">
-    <parent link="camera_link"/>
+    <parent link="stereo_bar_link"/>
     <child link="camera_right_link"/>
-    <origin rpy="0 0 0" xyz="0 -0.0315 0"/>
+    <origin rpy="0 0 0" xyz="0 -0.04 0"/>
   </joint>
   <link name="camera_right_optical_frame"/>
   <joint name="camera_right_optical_joint" type="fixed">
@@ -620,13 +674,13 @@
   <gazebo reference="camera_left_link">
     <sensor name="stereo_left" type="camera">
       <always_on>true</always_on>
-      <update_rate>30</update_rate>
+      <update_rate>15</update_rate>
       <visualize>false</visualize>
       <topic>stereo/left/image_raw</topic>
       <gz_frame_id>camera_left_optical_frame</gz_frame_id>
       <camera name="stereo_left">
         <camera_info_topic>stereo/left/camera_info</camera_info_topic>
-        <horizontal_fov>1.6</horizontal_fov>
+        <horizontal_fov>1.5</horizontal_fov>
         <image>
           <width>1280</width>
           <height>720</height>
@@ -634,24 +688,25 @@
         </image>
         <clip>
           <near>0.05</near>
-          <far>40.0</far>
+          <far>15.0</far>
         </clip>
         <noise>
           <type>gaussian</type>
           <mean>0.0</mean>
           <stddev>0.005</stddev>
         </noise>
+        <!-- No <distortion>: images are ideal pinhole, i.e. already rectified (R = identity). -->
         <lens>
           <intrinsics>
-            <fx>621.5773444163036</fx>
-            <fy>621.5773444163036</fy>
+            <fx>686.9927350716015</fx>
+            <fy>686.9927350716015</fy>
             <cx>640.0</cx>
             <cy>360.0</cy>
             <s>0</s>
           </intrinsics>
           <projection>
-            <p_fx>621.5773444163036</p_fx>
-            <p_fy>621.5773444163036</p_fy>
+            <p_fx>686.9927350716015</p_fx>
+            <p_fy>686.9927350716015</p_fy>
             <p_cx>640.0</p_cx>
             <p_cy>360.0</p_cy>
             <tx>0.0</tx>
@@ -664,13 +719,13 @@
   <gazebo reference="camera_right_link">
     <sensor name="stereo_right" type="camera">
       <always_on>true</always_on>
-      <update_rate>30</update_rate>
+      <update_rate>15</update_rate>
       <visualize>false</visualize>
       <topic>stereo/right/image_raw</topic>
       <gz_frame_id>camera_right_optical_frame</gz_frame_id>
       <camera name="stereo_right">
         <camera_info_topic>stereo/right/camera_info</camera_info_topic>
-        <horizontal_fov>1.6</horizontal_fov>
+        <horizontal_fov>1.5</horizontal_fov>
         <image>
           <width>1280</width>
           <height>720</height>
@@ -678,27 +733,28 @@
         </image>
         <clip>
           <near>0.05</near>
-          <far>40.0</far>
+          <far>15.0</far>
         </clip>
         <noise>
           <type>gaussian</type>
           <mean>0.0</mean>
           <stddev>0.005</stddev>
         </noise>
+        <!-- No <distortion>: images are ideal pinhole, i.e. already rectified (R = identity). -->
         <lens>
           <intrinsics>
-            <fx>621.5773444163036</fx>
-            <fy>621.5773444163036</fy>
+            <fx>686.9927350716015</fx>
+            <fy>686.9927350716015</fy>
             <cx>640.0</cx>
             <cy>360.0</cy>
             <s>0</s>
           </intrinsics>
           <projection>
-            <p_fx>621.5773444163036</p_fx>
-            <p_fy>621.5773444163036</p_fy>
+            <p_fx>686.9927350716015</p_fx>
+            <p_fy>686.9927350716015</p_fy>
             <p_cx>640.0</p_cx>
             <p_cy>360.0</p_cy>
-            <tx>-39.15937269822713</tx>
+            <tx>-54.95941880572812</tx>
             <ty>0</ty>
           </projection>
         </lens>

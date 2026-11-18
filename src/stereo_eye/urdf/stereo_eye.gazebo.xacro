@@ -1,12 +1,23 @@
 <?xml version="1.0"?>
-<!-- Gazebo Harmonic (gz-sim 8, SDF 1.10) plugins and sensors for Stereo Eye.
-     Included from stereo_eye.urdf.xacro (shares its properties). -->
+<!-- gz sim plugins and sensors for Stereo Eye. Included from stereo_eye.urdf.xacro (shares its properties).
+
+     Target: ROS 2 Humble + ros-humble-ros-gz (apt), which is built against Gazebo FORTRESS
+     (ign-gazebo 6). The same tags also work on Gazebo Harmonic (gz-sim 8, ros-humble-ros-gzharmonic):
+       * plugin filenames "gz-sim-*" are mapped to "ignition-gazebo-*" by Fortress's SystemLoader,
+         and Fortress registers the "gz::sim::systems::*" plugin-name aliases;
+       * <gz_frame_id> is read by ign-sensors 6 (fallback after ignition_frame_id) and by gz-sensors 8;
+       * <camera_info_topic> and <lens><intrinsics>/<projection> are SDFormat 1.7+ (sdformat12 / 14).
+     This is NOT Gazebo Classic: no libgazebo_ros_camera / multicamera / hack_baseline here. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <!-- == Stereo camera macro: one gz camera sensor per eye == -->
-  <!-- tx = -fx * baseline for the RIGHT camera so camera_info P[3] encodes the baseline
-       (RTAB-Map / stereo_image_proc need it). -->
-  <xacro:macro name="gz_stereo_eye" params="side tx">
+  <!-- == Stereo pair: two identical gz camera sensors on the rigid stereo bar == -->
+  <!-- gz sim has no "multicamera" sensor. Synchronisation comes from both sensors having the same
+       <update_rate>: the Sensors system renders them in the same sim step, so left/right images carry
+       identical header stamps (sim time).
+       Baseline in camera_info: gz-sensors writes <lens><projection><tx> into CameraInfo P[3]
+       (CameraSensor::PopulateInfo, Fortress and Harmonic), and ros_gz_bridge copies P unchanged.
+       So the right camera sets tx = -fx * baseline, the left camera tx = 0 (ROS stereo convention). -->
+  <xacro:macro name="gz_stereo_camera" params="side tx">
     <gazebo reference="camera_${side}_link">
       <sensor name="stereo_${side}" type="camera">
         <always_on>true</always_on>
@@ -23,27 +34,28 @@
             <format>R8G8B8</format>
           </image>
           <clip>
-            <near>0.05</near>
-            <far>40.0</far>
+            <near>${cam_near}</near>
+            <far>${cam_far}</far>
           </clip>
           <noise>
             <type>gaussian</type>
             <mean>0.0</mean>
             <stddev>0.005</stddev>
           </noise>
+          <!-- No <distortion>: images are ideal pinhole, i.e. already rectified (R = identity). -->
           <lens>
             <intrinsics>
               <fx>${cam_fx}</fx>
               <fy>${cam_fx}</fy>
-              <cx>${cam_w/2.0}</cx>
-              <cy>${cam_h/2.0}</cy>
+              <cx>${cam_cx}</cx>
+              <cy>${cam_cy}</cy>
               <s>0</s>
             </intrinsics>
             <projection>
               <p_fx>${cam_fx}</p_fx>
               <p_fy>${cam_fx}</p_fy>
-              <p_cx>${cam_w/2.0}</p_cx>
-              <p_cy>${cam_h/2.0}</p_cy>
+              <p_cx>${cam_cx}</p_cx>
+              <p_cy>${cam_cy}</p_cy>
               <tx>${tx}</tx>
               <ty>0</ty>
             </projection>
@@ -53,8 +65,8 @@
     </gazebo>
   </xacro:macro>
 
-  <xacro:gz_stereo_eye side="left"  tx="0.0"/>
-  <xacro:gz_stereo_eye side="right" tx="${-cam_fx*stereo_baseline}"/>
+  <xacro:gz_stereo_camera side="left"  tx="0.0"/>
+  <xacro:gz_stereo_camera side="right" tx="${cam_tx_right}"/>
 
   <!-- == IMU == -->
   <gazebo reference="imu_link">

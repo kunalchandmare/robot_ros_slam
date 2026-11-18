@@ -17,9 +17,9 @@ How it was made cute:
 | Feature | How it's built |
 |---|---|
 | Chunky proportions | A short, wide torso (15 × 14 × 15 cm) with **rounded vertical edges** (2 crossed boxes + 4 corner cylinders), and big wheels (Ø13 cm) that reach almost half the body height |
-| One big eye | The stereo camera *is* the eye: a blue rim → light-grey bezel → dark glass disc with both stereo lenses (light blue) inside, plus a white **sparkle** sphere for a "catch-light" |
+| One big eye | The stereo pair *is* the eye: a single wide "visor" (stadium shape) with a blue rim → light-grey bezel → dark glass, both stereo lenses (light blue, 80 mm apart) inside, plus a white **sparkle** sphere for a "catch-light" |
 | Pill-shaped head | A box with two cylinder ends, which looks like a rounded bar from the front. It has **blue ear lights** on both sides and a thin blue brow strip on top |
-| Blush cheeks | Two pink discs under the eye |
+| Blush cheeks | Two pink discs under the outer ends of the visor |
 | Twin antennas | Thin grey rods tilted outward, each with a blue ball tip |
 | Reference styling | A blue collar band near the top and a blue bumper band at the bottom, a light-grey chest panel with 3 dark vent slits, blue vertical stripes on each side of the panel, a small sky-blue status light, a grey shoulder cap and a blue neck |
 | Wheels | Dark tyres, blue hubs, white hub caps |
@@ -50,9 +50,10 @@ graph TD
   BL -->|caster_joint fixed| CA[caster_link]
   BL -->|imu_joint fixed| IMU[imu_link]
   BL -->|head_joint fixed| HD[head_link]
-  HD -->|camera_joint fixed| CAM[camera_link]
-  CAM -->|camera_left_joint y=+0.0315| CL[camera_left_link]
-  CAM -->|camera_right_joint y=-0.0315| CR[camera_right_link]
+  HD -->|stereo_bar_joint fixed| BAR[stereo_bar_link]
+  BAR -->|camera_joint identity| CAM[camera_link]
+  BAR -->|camera_left_joint y=+0.04| CL[camera_left_link]
+  BAR -->|camera_right_joint y=-0.04| CR[camera_right_link]
   CL -->|rpy -pi/2 0 -pi/2| CLO[camera_left_optical_frame]
   CR -->|rpy -pi/2 0 -pi/2| CRO[camera_right_optical_frame]
 ```
@@ -65,8 +66,9 @@ graph TD
 | `caster_link` | x = −0.075, z = −0.0475 (sphere touches the ground) | Rear support ball (fixed; frictionless in Gazebo) |
 | `imu_link` | z = +0.01, on the axle centreline | IMU mounting point, near the rotation centre to reduce centripetal acceleration |
 | `head_link` | z = +0.1925 | Head bar with the eye, cheeks, ears and antennas; head collision box and head mass |
-| `camera_link` | x = +0.061, z = +0.005 from the head centre | Stereo camera body. The origin is at the lens front, midway between the lenses. x forward (REP-103 body convention) |
-| `camera_left_link` / `camera_right_link` | y = ±0.0315 | Individual eye positions (where the Gazebo sensors attach) |
+| `stereo_bar_link` | x = +0.061, z = +0.005 from the head centre | **Rigid stereo bar** that carries both cameras (and the lens visuals and the camera mass). The origin is at the lens front, midway between the lenses. x forward |
+| `camera_link` | identity on the bar | Stereo-pair centre frame (massless), kept for drivers and tools that expect `camera_link` |
+| `camera_left_link` / `camera_right_link` | y = ±0.04 on the bar | Individual camera positions, x forward (where the Gazebo sensors attach) |
 | `camera_left_optical_frame` / `camera_right_optical_frame` | rpy (−π/2, 0, −π/2) | Optical frames: **z forward, x right, y down** (REP-103 optical convention), used as the `frame_id` of images and camera_info |
 
 All joints are fixed except the two continuous wheel joints (effort 2 N·m, velocity 15 rad/s, damping 0.01).
@@ -94,7 +96,7 @@ the caster, and it is low enough that moderate braking doesn't tip it forward.
 |---|---|---|---|
 | base_link (torso shell + battery + motors + SBC) | 2.20 | box 0.14 × 0.15 × 0.15 | 0.008250 / 0.007718 / 0.007718 |
 | head_link (head shell + neck) | 0.35 | box 0.09 × 0.245 × 0.095 | 0.002014 / 0.000499 / 0.001987 |
-| camera_link | 0.06 | box 0.025 × 0.09 × 0.03 | 4.5e-5 / 8e-6 / 4.4e-5 |
+| stereo_bar_link (bar + both camera modules) | 0.06 | box 0.025 × 0.11 × 0.03 | 6.5e-5 / 7.6e-6 / 6.4e-5 |
 | left / right wheel | 2 × 0.25 | solid cylinder r 0.065, h 0.03 | 0.000283 / 0.000283 / 0.000528 (axis z) |
 | caster_link | 0.05 | solid sphere r 0.0175 | 6e-6 each |
 | **Total** | **3.16** | | |
@@ -113,18 +115,18 @@ optical frames) are massless on purpose. Gazebo merges them into their parents.
 | Parameter | Value |
 |---|---|
 | Type | Single stereo pair, ZED-Mini / OAK-D-like |
-| Baseline | **0.063 m** (lenses at y = ±0.0315 in `camera_link`) |
+| Baseline | **0.080 m** (lenses at y = ±0.04 on `stereo_bar_link`; why 80 mm: see `STEREO_DESIGN.md`) |
 | Resolution | **1280 × 720 (720p) per eye**, R8G8B8 |
-| Frame rate | 30 fps |
-| Horizontal FOV | 1.6 rad (91.7°); vertical ≈ 1.05 rad (60°) from the 16:9 aspect |
-| Focal length | fx = fy = (1280/2) / tan(1.6/2) = **621.58 px**; cx = 640, cy = 360 |
-| Right-camera projection Tx | −fx · B = **−39.16** (so `camera_info` P[3] carries the baseline for stereo/RTAB-Map) |
+| Frame rate | 15 fps, same rate for both cameras (synchronised) |
+| Horizontal FOV | 1.5 rad (85.9°); vertical ≈ 0.965 rad (55.3°) from the 16:9 aspect |
+| Focal length | fx = fy = (1280/2) / tan(1.5/2) = **686.99 px**; cx = 640, cy = 360 (identical for both cameras) |
+| Right-camera projection Tx | −fx · B = **−54.96** (so `camera_info` P[3] carries the baseline for stereo/RTAB-Map) |
 | Clip range (sim) | 0.05-40 m |
 | Mounting height | lens centre **0.2625 m** above ground, 0.061 m ahead of the axle, looking straight ahead (0° pitch) |
 | Optical frames | `camera_left_optical_frame`, `camera_right_optical_frame`, rpy (−π/2, 0, −π/2) per **REP-103** |
 
-The camera is high and level so it sees furniture and walls instead of the floor. With a 60° vertical FOV, the floor
-comes into view about 0.45 m in front of the robot.
+The camera is high and level so it sees furniture and walls instead of the floor. With a 55° vertical FOV, the floor
+comes into view about 0.50 m in front of the robot. Full stereo design, topics and launcher notes: [`STEREO_DESIGN.md`](STEREO_DESIGN.md).
 
 ## 7. Materials / colours
 
@@ -145,8 +147,8 @@ comes into view about 0.45 m in front of the robot.
 
 1. **Argument**: `use_gazebo` (default `true`), which includes the optional Gazebo file.
 2. **Properties**: every dimension in one place: `wheel_radius`, `wheel_width`, `wheel_separation`, `torso_x/y/z`,
-   `torso_r`, `torso_off_x`, `ground_clear`, `head_x`, `head_core_y`, `head_z`, `neck_r/h`, `cap_h`, eye sizes (`bezel_r`, `glass_r`, `lens_r`, `eye_z`),
-   camera (`stereo_baseline`, `cam_w`, `cam_h`, `cam_fps`, `cam_hfov`; `cam_fx` is **derived**), caster (`caster_r`, `caster_x`), and masses.
+   `torso_r`, `torso_off_x`, `ground_clear`, `head_x`, `head_core_y`, `head_z`, `neck_r/h`, `cap_h`, eye sizes (`eye_half`, `rim_r`, `bezel_r`, `glass_r`, `lens_r`, `eye_z`),
+   camera (`stereo_baseline`, `cam_w`, `cam_h`, `cam_fps`, `cam_hfov`, `cam_near`, `cam_far`; `cam_fx`, `cam_cx`, `cam_cy`, `cam_tx_right` are **derived**), caster (`caster_r`, `caster_x`), and masses.
    Derived heights (`torso_cz`, `torso_top`, `head_cz`, `cam_front_x`) are computed, so the stack stays connected when you change a size.
 3. **Materials**: the 8 colours above.
 4. **Inertial macros**: `box_inertial`, `cylinder_inertial`, `sphere_inertial` (mass + dimensions + origin block).
@@ -158,19 +160,19 @@ comes into view about 0.45 m in front of the robot.
 
 Examples:
 * Bigger wheels: change `wheel_radius`. Everything above the axle moves with it, and the caster offset is recalculated.
-* A different camera (e.g. OAK-D Lite, 75 mm): set `stereo_baseline`, `cam_hfov`, `cam_w`, `cam_h`, and `cam_fx` and `tx` update automatically.
+* A different camera (e.g. OAK-D Lite, 75 mm): set `stereo_baseline`, `cam_hfov`, `cam_w`, `cam_h`, and `cam_fx` and `cam_tx_right` update automatically. For baselines above about 9 cm, also widen `eye_half` so the lenses stay inside the visor.
 * Heavier battery: change `torso_mass` (and recheck that the COM stays behind the axle).
 
 Collision geometry is kept simple: torso box, head box, wheel cylinders, caster sphere.
 
 ## 9. Optional Gazebo file (`urdf/stereo_eye.gazebo.xacro`)
 
-This file is included only when `use_gazebo:=true`. It holds **Gazebo Harmonic (gz-sim 8) tags**, so the core model stays
+This file is included only when `use_gazebo:=true`. It holds **gz sim tags that work on Gazebo Fortress (what `ros-humble-ros-gz` uses) and Harmonic**, so the core model stays
 simulator-agnostic. It declares:
 
 | Element | Details |
 |---|---|
-| `stereo_left`, `stereo_right` camera sensors | On `camera_left_link` / `camera_right_link`: 1280×720, 30 Hz, HFOV 1.6, Gaussian noise σ 0.005, lens intrinsics + projection (right Tx = −39.16), topics `stereo/{left,right}/image_raw` + `stereo/{left,right}/camera_info`, `gz_frame_id` = the optical frame |
+| `stereo_left`, `stereo_right` camera sensors | On `camera_left_link` / `camera_right_link`: 1280×720, 15 Hz (same rate, so same stamps), HFOV 1.5, clip 0.05–15 m, Gaussian noise σ 0.005, identical lens intrinsics + projection (right Tx = −54.96), topics `stereo/{left,right}/image_raw` + `stereo/{left,right}/camera_info`, `gz_frame_id` = the optical frame |
 | `imu_sensor` | On `imu_link`, 100 Hz, topic `imu`, gyro σ 0.0009 rad/s, accel σ 0.017 m/s² |
 | DiffDrive plugin | `left/right_wheel_joint`, separation 0.19, radius 0.065, limits ±0.6 m/s, ±2 rad/s, ±1 m/s², ±3 rad/s²; `cmd_vel` → `odom` + `tf` (odom → base_footprint) at 30 Hz |
 | JointStatePublisher plugin | Publishes both wheel joints on `joint_states` |
@@ -185,7 +187,7 @@ Only the model source is shipped:
 | File | Why it exists |
 |---|---|
 | `urdf/stereo_eye.urdf.xacro` | **Source of truth.** Parametric (properties + macros), so you edit this file. ROS tools expand it on the fly with `xacro` |
-| `urdf/stereo_eye.gazebo.xacro` | Optional Gazebo Harmonic sensors and plugins, kept separate so the core model stays simulator-agnostic. Included only when `use_gazebo:=true` |
+| `urdf/stereo_eye.gazebo.xacro` | Optional gz sim (Fortress/Harmonic) sensors and plugins, kept separate so the core model stays simulator-agnostic. Included only when `use_gazebo:=true` |
 | `urdf/stereo_eye.urdf` | **Plain pre-expanded URDF**, for tools that can't run xacro: Phobos (Blender), Isaac Sim / Omniverse URDF importer, MATLAB, PyBullet, MuJoCo's URDF compiler, Webots importer, online URDF viewers. Generated with the Gazebo tags included (non-Gazebo tools ignore them) |
 | `package.xml`, `CMakeLists.txt` | Make this a ROS 2 package, so `$(find stereo_eye)` and `package://stereo_eye/...` resolve and the model installs to `share/stereo_eye/urdf`. Needed by robot_state_publisher, RViz, Gazebo spawners and any launch file another package writes. The only dependency is `xacro` |
 
@@ -226,11 +228,13 @@ The Gazebo file is included by relative path, so expansion works from both the s
 robot name is: stereo_eye
 root Link: base_footprint
   base_link ─ left_wheel_link [continuous], right_wheel_link [continuous], caster_link, imu_link,
-              head_link ─ camera_link ─ camera_left_link ─ camera_left_optical_frame
-                                      └ camera_right_link ─ camera_right_optical_frame
-links: 12  joints: 11  total mass: 3.160 kg  COM: (-0.0211, 0, 0.0963) m
+              head_link ─ stereo_bar_link ─ camera_link
+                                          ├ camera_left_link ─ camera_left_optical_frame
+                                          └ camera_right_link ─ camera_right_optical_frame
+links: 13  joints: 12  total mass: 3.160 kg  COM: (-0.0212, 0, 0.0963) m
 inertia tensors positive & triangle inequality: True
-optical z-axis = +x (forward) for both eyes; stereo baseline 0.063 m
+optical frames: z = forward, x = right, y = down for both cameras; stereo baseline 0.080 m (TF) = -Tx/fx
+both camera sensors: identical 1280x720, 15 Hz, HFOV 1.5, fx = fy = 686.99
 no <mesh> / package:// references (primitives only)
 ```
 xacro expands without errors both with and without the Gazebo file.
