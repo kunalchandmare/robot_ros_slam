@@ -1,6 +1,18 @@
 <?xml version="1.0" ?>
 <sdf version="1.7">
   <world name="apartment">
+    <!-- gz sim system plugins. Declaring any world plugin disables Gazebo's default set,
+         so Physics, UserCommands and SceneBroadcaster are listed explicitly. Sensors (ogre2)
+         renders the stereo cameras; Imu makes the IMU publish. Fortress (ign-gazebo 6) names;
+         on Garden/Harmonic the equivalents are gz-sim-*-system / gz::sim::systems::*.
+         (STEREO_DESIGN.md section 8.) -->
+    <plugin filename="ignition-gazebo-physics-system" name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-user-commands-system" name="ignition::gazebo::systems::UserCommands"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system" name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="ignition-gazebo-imu-system" name="ignition::gazebo::systems::Imu"/>
     <gravity>0 0 -9.81</gravity>
     <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
     <atmosphere type="adiabatic"/>
@@ -12,7 +24,7 @@
     </physics>
 
     <scene>
-      <ambient>0.4 0.4 0.4 1</ambient>
+      <ambient>0.5 0.5 0.5 1</ambient>
       <background>0.7 0.75 0.8 1</background>
       <shadows>true</shadows>
     </scene>
@@ -29,6 +41,33 @@
         <quadratic>0.001</quadratic>
       </attenuation>
       <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Two soft ceiling lights (no shadows, cheap) so wall shadows from the
+         sun don't leave the roofless rooms too dark for stereo matching. -->
+    <light name="ceiling_light_north" type="point">
+      <cast_shadows>false</cast_shadows>
+      <pose>4.0 5.7 2.4 0 0 0</pose>
+      <diffuse>0.5 0.5 0.48 1</diffuse>
+      <specular>0.05 0.05 0.05 1</specular>
+      <attenuation>
+        <range>8</range>
+        <constant>0.6</constant>
+        <linear>0.08</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+    <light name="ceiling_light_south" type="point">
+      <cast_shadows>false</cast_shadows>
+      <pose>5.0 1.8 2.4 0 0 0</pose>
+      <diffuse>0.5 0.5 0.48 1</diffuse>
+      <specular>0.05 0.05 0.05 1</specular>
+      <attenuation>
+        <range>8</range>
+        <constant>0.6</constant>
+        <linear>0.08</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
     </light>
 
     <model name="ground_plane">
