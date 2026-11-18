@@ -25,6 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-nav2-bringup \
     ros-humble-turtlebot3* \
     ros-humble-ros-gz \
+    # Visualization and teleop (base image is ros:humble-ros-base, not desktop)
+    ros-humble-rviz2 \
+    ros-humble-teleop-twist-keyboard \
+    xterm \
     # GUI / Qt dependencies (helps with RViz / rtabmap_viz)
     libqt5gui5 \
     libxcb-xinerama0 \

@@ -56,6 +56,7 @@ Sourcing `/workspaces/ros2-dev/install/setup.bash` is required so
 | `z`            | `0.05`                                          | Spawn height (m), small drop onto floor  |
 | `yaw`          | `0.0`                                           | Spawn heading (rad), faces +X            |
 | `rviz`         | `true`                                          | Start RViz2 with `stereo_slam.rviz`      |
+| `teleop`       | `true`                                          | Start `teleop_twist_keyboard` in xterm   |
 
 Example: `ros2 launch stereo_eye_launcher launch.py x:=3.0 y:=4.5 yaw:=1.57`
 
@@ -168,6 +169,25 @@ relative names `map` (OccupancyGrid) and `cloud_map` (PointCloud2), which
 resolve to `/map` and `/cloud_map`. Older ROS 1 names such as `/rtabmap/grid_map`
 or `proj_map` do not apply here.
 
+## Teleop
+
+An xterm window running `teleop_twist_keyboard` opens automatically and
+publishes `geometry_msgs/Twist` on `/cmd_vel`, which the ros_gz_bridge
+forwards to Gazebo. Click that window first, then use the keys it prints
+(`i`/`j`/`l`/`k` and so on) to drive the robot.
+
+Disable it with `teleop:=false`:
+
+```bash
+ros2 launch stereo_eye_launcher launch.py teleop:=false
+```
+
+Or run it in a separate terminal (useful if xterm is not available):
+
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+```
+
 ## Quick checks after launch
 
 ```bash
@@ -176,7 +196,6 @@ ros2 topic hz /stereo/left/image_raw
 ros2 topic hz /odom
 ros2 topic echo --once /stereo/right/camera_info --field p   # expect P[3] = -54.96
 ros2 run tf2_ros tf2_echo map base_footprint
-ros2 run teleop_twist_keyboard teleop_twist_keyboard   # drive with /cmd_vel
 ```
 
 Do not start a bare `rviz2` from this list. Use the launch file's RViz node, or

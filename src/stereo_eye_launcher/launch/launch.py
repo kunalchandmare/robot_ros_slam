@@ -85,6 +85,11 @@ def generate_launch_description():
             default_value='true',
             description='Start RViz2 with the stereo SLAM config if true',
         ),
+        DeclareLaunchArgument(
+            'teleop',
+            default_value='true',
+            description='Start teleop_twist_keyboard in an xterm if true',
+        ),
     ]
 
     robot_description = ParameterValue(
@@ -270,6 +275,19 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('rviz')),
     )
 
+    # Default topic is cmd_vel, which matches the ros_gz_bridge /cmd_vel
+    # (ROS -> Gazebo) mapping. xterm is required so the node has a TTY for
+    # key input; disable with teleop:=false if no display is available.
+    teleop = Node(
+        package='teleop_twist_keyboard',
+        executable='teleop_twist_keyboard',
+        name='teleop_twist_keyboard',
+        prefix='xterm -e',
+        output='screen',
+        parameters=[{'use_sim_time': True}],
+        condition=IfCondition(LaunchConfiguration('teleop')),
+    )
+
     return LaunchDescription(declared_args + [
         set_ign_resource_path,
         set_resource_path,
@@ -282,4 +300,5 @@ def generate_launch_description():
         rtabmap,
         camera_brightness,
         rviz,
+        teleop,
     ])
