@@ -172,8 +172,8 @@ simulator-agnostic. It declares:
 
 | Element | Details |
 |---|---|
-| `stereo_left`, `stereo_right` camera sensors | On `camera_left_link` / `camera_right_link`: 1280×720, 15 Hz (same rate, so same stamps), HFOV 1.5, clip 0.05–15 m, Gaussian noise σ 0.005, identical lens intrinsics + projection (right Tx = −54.96), topics `stereo/{left,right}/image_raw` + `stereo/{left,right}/camera_info`, `gz_frame_id` = the optical frame |
-| `imu_sensor` | On `imu_link`, 100 Hz, topic `imu`, gyro σ 0.0009 rad/s, accel σ 0.017 m/s² |
+| `stereo_left`, `stereo_right` camera sensors | On `camera_left_link` / `camera_right_link`: 1280×720, 15 Hz (same rate, so same stamps), HFOV 1.5, clip 0.05–15 m, Gaussian noise σ 0.005, identical lens intrinsics + projection (right Tx = −54.96), topics `stereo/{left,right}/image_raw` + `stereo/{left,right}/camera_info`; frame = the optical frame via both `<ignition_frame_id>` (Fortress, ign-sensors 6.2+) and `<gz_frame_id>` (Garden/Harmonic) |
+| `imu_sensor` | On `imu_link` (both frame tags), 100 Hz, topic `imu`, gyro σ 0.0009 rad/s, accel σ 0.017 m/s² |
 | DiffDrive plugin | `left/right_wheel_joint`, separation 0.19, radius 0.065, limits ±0.6 m/s, ±2 rad/s, ±1 m/s², ±3 rad/s²; `cmd_vel` → `odom` + `tf` (odom → base_footprint) at 30 Hz |
 | JointStatePublisher plugin | Publishes both wheel joints on `joint_states` |
 

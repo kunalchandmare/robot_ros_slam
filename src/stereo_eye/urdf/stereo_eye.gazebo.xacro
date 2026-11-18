@@ -5,7 +5,12 @@
      (ign-gazebo 6). The same tags also work on Gazebo Harmonic (gz-sim 8, ros-humble-ros-gzharmonic):
        * plugin filenames "gz-sim-*" are mapped to "ignition-gazebo-*" by Fortress's SystemLoader,
          and Fortress registers the "gz::sim::systems::*" plugin-name aliases;
-       * <gz_frame_id> is read by ign-sensors 6 (fallback after ignition_frame_id) and by gz-sensors 8;
+       * sensor frame ids: every sensor sets BOTH tags to the same frame:
+           <ignition_frame_id>  read by ign-sensors 6.2.0+ (Fortress), preferred there;
+           <gz_frame_id>        read by gz-sensors 7/8 (Garden/Harmonic), and by ign-sensors 6.8.0+ only as a fallback.
+         ign-sensors 6.8.0+ logs a harmless "Found both ... Only ignition_frame_id will be used" warning.
+         ign-sensors 6.0.x-6.1.0 (Ubuntu jammy universe) reads neither: frame_id = sensor name. Use 6.2.0+
+         (packages.ros.org ships 6.9.0 for Humble).
        * <camera_info_topic> and <lens><intrinsics>/<projection> are SDFormat 1.7+ (sdformat12 / 14).
      This is NOT Gazebo Classic: no libgazebo_ros_camera / multicamera / hack_baseline here. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
@@ -14,9 +19,14 @@
   <!-- gz sim has no "multicamera" sensor. Synchronisation comes from both sensors having the same
        <update_rate>: the Sensors system renders them in the same sim step, so left/right images carry
        identical header stamps (sim time).
-       Baseline in camera_info: gz-sensors writes <lens><projection><tx> into CameraInfo P[3]
-       (CameraSensor::PopulateInfo, Fortress and Harmonic), and ros_gz_bridge copies P unchanged.
-       So the right camera sets tx = -fx * baseline, the left camera tx = 0 (ROS stereo convention). -->
+       Baseline in camera_info (right P[3] = -fx * baseline), two independent mechanisms:
+         1. gz-sim's Sensors system (ign-gazebo 6.0+ and gz-sim 8) calls SetBaseline() on the second camera
+            that shares a parent link with another camera, using the Y offset between them and the topic
+            names ("left"/"right") to pick the right camera. After URDF fixed-joint lumping both sensors
+            sit on base_link at y = +/-baseline/2, so this sets P[3] on every Fortress/Harmonic version.
+         2. <lens><projection><tx> is copied into P[3] by ign-sensors 6.7.0+ / gz-sensors 8 (ignored by
+            ign-sensors <= 6.6). It is set to the same value, so both paths agree.
+       ros_gz_bridge copies P unchanged. Left camera tx = 0 (ROS stereo convention). -->
   <xacro:macro name="gz_stereo_camera" params="side tx">
     <gazebo reference="camera_${side}_link">
       <sensor name="stereo_${side}" type="camera">
@@ -24,7 +34,8 @@
         <update_rate>${cam_fps}</update_rate>
         <visualize>false</visualize>
         <topic>stereo/${side}/image_raw</topic>
-        <gz_frame_id>camera_${side}_optical_frame</gz_frame_id>
+        <ignition_frame_id>camera_${side}_optical_frame</ignition_frame_id>  <!-- Fortress (ign-sensors 6.2+) -->
+        <gz_frame_id>camera_${side}_optical_frame</gz_frame_id>              <!-- Garden/Harmonic (+ Fortress 6.8+ fallback) -->
         <camera name="stereo_${side}">
           <camera_info_topic>stereo/${side}/camera_info</camera_info_topic>
           <horizontal_fov>${cam_hfov}</horizontal_fov>
@@ -75,7 +86,8 @@
       <update_rate>100</update_rate>
       <visualize>false</visualize>
       <topic>imu</topic>
-      <gz_frame_id>imu_link</gz_frame_id>
+      <ignition_frame_id>imu_link</ignition_frame_id>  <!-- Fortress (ign-sensors 6.2+) -->
+      <gz_frame_id>imu_link</gz_frame_id>              <!-- Garden/Harmonic (+ Fortress 6.8+ fallback) -->
       <imu>
         <angular_velocity>
           <x><noise type="gaussian"><mean>0</mean><stddev>0.0009</stddev></noise></x>

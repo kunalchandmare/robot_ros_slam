@@ -13,13 +13,27 @@ what they may need.
 | Dockerfile installs `ros-humble-ros-gz` (apt) and **no** `ros-humble-ros-gzharmonic` / `gz-harmonic` | The Humble `ros_gz` binaries are built against **Gazebo Fortress** (ign-gazebo 6) by default (`ros_gz_sim/CMakeLists.txt`: "Default to Fortress"). `gz_sim.launch.py` then runs `ign gazebo` (`gz_version` 6) |
 | `stereo_eye_launcher/launch/launch.py` uses `ros_gz_sim` `gz_sim.launch.py` + `create` + `ros_gz_bridge parameter_bridge` with `gz.msgs.*` types; comments say "Gazebo Sim (Harmonic)" | It's **gz sim (new Gazebo), not Classic**. The "Harmonic" wording conflicts with the Dockerfile (see open question below) |
 | `apartment_gazebo`: SDF 1.7 world, `ros_gz_sim` exec dependency, no world system plugins | Works on Fortress and Harmonic. Sensors need world systems (section 8) |
-| `stereo_eye.gazebo.xacro` (before this change) | `gz-sim-*` plugin filenames, `gz::sim::systems::*` names, `<gz_frame_id>` |
+| `stereo_eye.gazebo.xacro` (before the stereo change) | `gz-sim-*` plugin filenames, `gz::sim::systems::*` names, `<gz_frame_id>` only (now both frame tags, see below) |
 
 **Decision: write tags that work on both Fortress (what the container actually installs) and Harmonic.** Upstream source confirms:
 
 * **Plugin filenames.** Fortress's `SystemLoader` rewrites the prefix `gz-sim` → `ignition-gazebo`, and Fortress registers the
   `gz::sim::systems::DiffDrive` / `JointStatePublisher` aliases. So the existing `gz-sim-*` / `gz::sim::*` plugins load on both.
-* **Frame IDs.** `<gz_frame_id>` is read by ign-sensors 6 (as a fallback after `ignition_frame_id`) and by gz-sensors 8.
+* **Frame IDs: version-dependent, so every sensor sets both `<ignition_frame_id>` and `<gz_frame_id>`** (same value).
+  Checked against the gz-sensors release tags:
+
+  | gz-sensors version | Tag(s) read for the sensor frame | Source |
+  |---|---|---|
+  | ign-sensors 6.0.0 – 6.1.0 (Ubuntu jammy *universe* ships 6.1.0) | **none**: image/camera_info frame_id = sensor name (`stereo_left`) | `src/Sensor.cc` L131 "todo how to use frame?"; `src/CameraSensor.cc` L403, L609 `add_value(this->Name())` @ `ignition-sensors6_6.1.0` |
+  | ign-sensors 6.2.0 – 6.7.1 | `<ignition_frame_id>` only | `src/Sensor.cc` L148-150 @ `ignition-sensors6_6.6.0` |
+  | ign-sensors 6.8.0+ (packages.ros.org ships **6.9.0** for Humble today) | `<ignition_frame_id>` preferred, `<gz_frame_id>` fallback; warns if both are present | `src/Sensor.cc` L148-166 @ `ignition-sensors6_6.9.0` ([link](https://github.com/gazebosim/gz-sensors/blob/ignition-sensors6_6.9.0/src/Sensor.cc#L148-L166)); added by commit ff5bbb1 "Allow specifying gz_frame_id as an alternative to ignition_frame_id (#409)", 2024-01-12 |
+  | gz-sensors 8 (Harmonic) | `<gz_frame_id>` only | `src/Sensor.cc` L188-190 @ `gz-sensors8` ([link](https://github.com/gazebosim/gz-sensors/blob/gz-sensors8/src/Sensor.cc#L188-L190)) |
+
+  gz-sim's Sensors system (`ign-gazebo6`) doesn't handle frame ids. It passes the sensor SDF to gz-sensors.
+  With both tags, ign-sensors 6.8+ logs one harmless warning per sensor ("Found both `ignition_frame_id` and `gz_frame_id` ...
+  Only `ignition_frame_id` will be used"). Both carry the same frame, so the result is the same.
+  **Minimum: ign-sensors 6.2.0.** Below that, image and camera_info frame_ids are the sensor names and RTAB-Map's TF lookups fail.
+  The repo's container (`ros:humble` + packages.ros.org) gets 6.9.0. Make sure it isn't pinned to Ubuntu's 6.1.0.
 * **Camera info.** `<camera_info_topic>` and `<lens><intrinsics>/<projection>` are SDFormat 1.7+ (sdformat12 for Fortress, sdformat14 for Harmonic).
 * **Bridge.** `ros_gz_bridge` (humble branch) accepts both `gz.msgs.*` and `ignition.msgs.*` type strings, so the launcher's bridge arguments are valid.
 * **Not Classic.** Gazebo Classic tags (`libgazebo_ros_camera.so`, `multicamera`, `hack_baseline`) are **not** used. They would be ignored by gz sim.
@@ -69,7 +83,7 @@ At runtime, `odom → base_footprint` comes from the DiffDrive plugin (bridged `
 | Distortion / rectification | none / R = identity | Sim images are ideal pinhole, i.e. **already rectified** |
 | Clip | 0.05 m to 15 m | The apartment is 10 × 8 m |
 | Noise | Gaussian σ = 0.005 (both) | |
-| Image frame_id | `camera_left_optical_frame` / `camera_right_optical_frame` (via `<gz_frame_id>`) | Also used by camera_info |
+| Image frame_id | `camera_left_optical_frame` / `camera_right_optical_frame` (via `<ignition_frame_id>` + `<gz_frame_id>`) | Also used by camera_info (ign-sensors 6.2.0+) |
 
 **Why an 80 mm baseline (allowed range 6-12 cm) for an indoor apartment.** Depth comes from disparity d = fx·B / Z.
 The depth error for a matching error δd ≈ 0.25 px is δZ = Z²·δd / (fx·B). The closest measurable depth for a disparity
@@ -122,15 +136,29 @@ The sim images have no distortion (R = identity, P = K plus Tx), so they are alr
 
 ## 5. Baseline in the right `camera_info` (Tx = −fx·B)
 
-* **gz sim (Fortress and Harmonic): handled in the robot description.** gz-sensors' `CameraSensor::PopulateInfo` fills
-  `CameraInfo.projection.p` = [p_fx, 0, p_cx, **tx**, 0, p_fy, p_cy, ty, 0, 0, 1, 0] directly from SDF
-  `<lens><projection>` (same code in ign-sensors 6 and gz-sensors 8). `ros_gz_bridge` copies P unchanged. So the right
-  sensor sets `<tx>${-cam_fx*stereo_baseline}</tx>` = **−54.96** and the left sets 0. The value is derived from the same
-  xacro properties as the TF, so it can't drift. Validated: −Tx/fx = 0.0800 m = the TF baseline.
+* **gz sim (Fortress and Harmonic): handled by the simulator plus the robot description, through two independent paths:**
+  1. **gz-sim auto-baseline (works on every Fortress and Harmonic version).** The Sensors system notices when a second
+     camera is created on a link that already has a camera. It uses the topic names ("left"/"right") to decide which is the
+     right camera, computes `baseline = |y_right − y_left|` from the sensor poses, and calls `CameraSensor::SetBaseline()`, which sets
+     `P[3] = −fx · baseline`.
+     Sources: `src/systems/sensors/Sensors.cc` L831-866 @ `ignition-gazebo6_6.18.0` ([link](https://github.com/gazebosim/gz-sim/blob/ignition-gazebo6_6.18.0/src/systems/sensors/Sensors.cc#L831-L866)),
+     present since `ignition-gazebo6_6.0.0` (L624-626); `gz-sim8` L1217-1219.
+     `SetBaseline` writes P[3]: gz-sensors `src/CameraSensor.cc` L805-814 @ `ignition-sensors6_6.9.0`, L616-625 @ `ignition-sensors6_6.1.0`.
+     **What this needs from our model:** after URDF → SDF fixed-joint lumping, both camera sensors end up on `base_link` at
+     y = ±0.04, and their topics contain `left` / `right`. Our layout meets both conditions, so the auto-baseline is 0.080 m.
+     Don't add a third camera sensor to the robot without re-checking this.
+  2. **`<lens><projection><tx>` in SDF (gz-sensors version-dependent).** `CameraSensor::PopulateInfo` copies `<tx>` into
+     `P[3]` on **ign-sensors 6.7.0+** (`src/CameraSensor.cc` L722 / L758 `proj->add_p(_cameraSdf->LensProjectionTx())` @ `ignition-sensors6_6.9.0`,
+     [link](https://github.com/gazebosim/gz-sensors/blob/ignition-sensors6_6.9.0/src/CameraSensor.cc#L722-L770); commit d090f91 "Camera: configure projection matrix from SDFormat (#249)")
+     and on gz-sensors 8 (L774). **ign-sensors ≤ 6.6.0 ignores `<tx>`.** There, `PopulateInfo` writes `−fx · baseline` from the member set by
+     path 1 (`// TODO(anyone) Get tx and ty from SDF`, L571/L578 @ 6.1.0, L645/L652 @ 6.6.0).
+     The xacro sets the right camera's `<tx>` = `−cam_fx·stereo_baseline` = **−54.96** (left 0), the same value path 1 computes, so
+     the two paths agree on every version. Path 1 runs after `PopulateInfo` and has the last word.
+  `ros_gz_bridge` copies P unchanged. Validated in the URDF: −Tx/fx = 0.0800 m = the TF baseline.
   (gz sim has no `hack_baseline`. It exists only in the Classic `libgazebo_ros_camera` plugin.)
 * **Launcher-side check (required once):** `ros2 topic echo --once /stereo/right/camera_info --field p` should show
-  `[686.99, 0, 640, -54.96, 0, 686.99, 360, 0, 0, 0, 1, 0]`. If a particular Gazebo build publishes `p[3] = 0` (e.g. an old
-  ign-sensors without projection support), RTAB-Map fails with an invalid stereo baseline. The fallbacks below are launcher-side:
+  `[686.99, 0, 640, -54.96, 0, 686.99, 360, 0, 0, 0, 1, 0]`. If it shows `p[3] = 0`, path 1 didn't trigger (e.g. the sensors
+  ended up on different links, or the topics lost `left`/`right`) and the build is ign-sensors ≤ 6.6. RTAB-Map then fails with an invalid stereo baseline. The fallbacks below are launcher-side:
   1. **A small camera_info relay** (about 20 lines of rclpy) that subscribes to `/stereo/right/camera_info`, sets `p[3] = -p[0]*0.080`,
      and republishes on `/stereo/right/camera_info_fixed`. Remap RTAB-Map's `right/camera_info` to it.
   2. **Publish both camera_infos from a calibration YAML** with `camera_info_manager` (as a real stereo driver does) and ignore the gz ones.
@@ -228,5 +256,6 @@ driver's frames to `stereo_bar_link`), and feed RTAB-Map the driver's **rectifie
   TF baseline 0.080 m = −Tx/fx.
 * Both camera sensors have identical intrinsics, rate and resolution: 1280×720, 15 Hz, HFOV 1.5, fx = fy = 686.99, cx = 640, cy = 360.
   Left Tx = 0, right Tx = −54.96.
+* Both camera sensors and the IMU carry `<ignition_frame_id>` and `<gz_frame_id>` with the same frame (checked in the generated URDF).
 * No `<mesh>` / `package://` references (primitives only). `check_urdf` wasn't available in the validation environment.
 * **Not yet run in Gazebo.** The first sim run should confirm the `camera_info` P[3] value and the identical stamps (section 5).
