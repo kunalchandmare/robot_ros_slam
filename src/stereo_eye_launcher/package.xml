@@ -4,9 +4,11 @@
   <name>stereo_eye_launcher</name>
   <version>0.1.0</version>
   <description>
-    Launch package that starts a Gazebo Sim (Harmonic) simulation of the
-    stereo_eye robot inside the apartment_gazebo world, including
-    robot_state_publisher and a ros_gz_bridge for clock, sensors, and drive topics.
+    Launch package that starts a Gazebo Sim (Fortress, via ROS 2 Humble
+    ros-humble-ros-gz) simulation of the stereo_eye robot inside the
+    apartment_gazebo world, including robot_state_publisher, a ros_gz_bridge
+    for clock, sensors, and drive topics, stereo visual odometry, and
+    RTAB-Map stereo SLAM.
   </description>
   <maintainer email="kunal@example.com">Kunal</maintainer>
   <license>Apache-2.0</license>
@@ -14,11 +16,14 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <exec_depend>apartment_gazebo</exec_depend>
+  <exec_depend>camera_brightness</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>rtabmap_odom</exec_depend>
+  <exec_depend>rtabmap_slam</exec_depend>
   <exec_depend>stereo_eye</exec_depend>
   <exec_depend>xacro</exec_depend>
 

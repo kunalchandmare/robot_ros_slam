@@ -1,4 +1,11 @@
-"""Launch stereo_eye in the apartment_gazebo world under Gazebo Sim (Harmonic)."""
+"""Launch stereo_eye in the apartment_gazebo world under Gazebo Sim (Fortress).
+
+The Dockerfile installs ROS 2 Humble with ros-humble-ros-gz, which is built
+against Gazebo Fortress (ign-gazebo 6). gz_sim.launch.py therefore runs
+``ign gazebo``. The same launch arguments and gz.msgs.* bridge types also
+work on Harmonic (ros-humble-ros-gzharmonic), but this file follows the
+container that is actually in the repo.
+"""
 
 from launch import LaunchDescription
 from launch.actions import (
@@ -79,6 +86,11 @@ def generate_launch_description():
         value_type=str,
     )
 
+    # Fortress (ign gazebo) reads IGN_GAZEBO_RESOURCE_PATH. GZ_SIM_RESOURCE_PATH
+    # is the Garden/Harmonic name; keep both so model:// URIs resolve either way.
+    set_ign_resource_path = AppendEnvironmentVariable(
+        'IGN_GAZEBO_RESOURCE_PATH', apartment_models
+    )
     set_resource_path = AppendEnvironmentVariable(
         'GZ_SIM_RESOURCE_PATH', apartment_models
     )
@@ -86,6 +98,8 @@ def generate_launch_description():
         'GAZEBO_MODEL_PATH', apartment_models
     )
 
+    # ros_gz_sim's gz_sim.launch.py accepts gz_args on Humble/Fortress (and
+    # then execs "ign gazebo") as well as on Harmonic ("gz sim").
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(gz_sim_launch),
         launch_arguments={
@@ -121,8 +135,16 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}],
     )
 
-    # Topics match stereo_eye.gazebo.xacro (Gazebo Harmonic / gz-sim 8).
+    # Topics match stereo_eye.gazebo.xacro. Humble ros_gz_bridge accepts
+    # gz.msgs.* (and ignition.msgs.*) type strings on Fortress and Harmonic.
     # '[' = Gazebo -> ROS, ']' = ROS -> Gazebo.
+    #
+    # TF ownership: stereo_odometry publishes odom -> base_footprint, so the
+    # DiffDrive /tf is intentionally not bridged (a second parent would break
+    # the tree). The DiffDrive /odom topic is remapped to /wheel_odom so it
+    # does not collide with stereo_odometry's /odom. robot_state_publisher
+    # still provides base_footprint -> camera_* frames (and the rest of the
+    # model) from the URDF plus bridged /joint_states.
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -136,18 +158,100 @@ def generate_launch_description():
             '/stereo/right/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
             '/imu@sensor_msgs/msg/Imu[gz.msgs.IMU',
             '/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry',
-            '/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V',
             '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
             '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
+        ],
+        remappings=[
+            ('/odom', '/wheel_odom'),
         ],
         parameters=[{'use_sim_time': use_sim_time}],
     )
 
+    # Sim images have no distortion (R = identity), so they are already
+    # rectified. Remap image_raw onto RTAB-Map's image_rect inputs; do not
+    # rename the bridge topics. Exact sync (approx_sync false): the two gz
+    # camera sensors share the same update_rate and are rendered in one
+    # Sensors-system step, so left/right (and VO odom) carry identical
+    # sim-time stamps. That is the gz-sim stand-in for a Classic multicamera
+    # sensor. If a loaded bridge ever desynchronizes them, switch to
+    # approx_sync true with approx_sync_max_interval 0.01.
+    stereo_remaps = [
+        ('left/image_rect', '/stereo/left/image_raw'),
+        ('left/camera_info', '/stereo/left/camera_info'),
+        ('right/image_rect', '/stereo/right/image_raw'),
+        ('right/camera_info', '/stereo/right/camera_info'),
+        ('odom', '/odom'),
+    ]
+    stereo_common_params = {
+        'use_sim_time': use_sim_time,
+        'frame_id': 'base_footprint',
+        'approx_sync': False,
+        'wait_for_transform': 0.2,
+        'queue_size': 20,
+        'Reg/Force3DoF': 'true',
+        'Stereo/MaxDisparity': '160',
+    }
+
+    stereo_odometry = Node(
+        package='rtabmap_odom',
+        executable='stereo_odometry',
+        name='stereo_odometry',
+        output='screen',
+        parameters=[{
+            **stereo_common_params,
+            'odom_frame_id': 'odom',
+            'publish_tf': True,
+        }],
+        remappings=stereo_remaps,
+    )
+
+    # odom_frame_id is left unset so rtabmap subscribes to the /odom topic
+    # from stereo_odometry (setting it would read TF only and drop the topic).
+    # rtabmap itself publishes only map -> odom.
+    rtabmap = Node(
+        package='rtabmap_slam',
+        executable='rtabmap',
+        name='rtabmap',
+        output='screen',
+        arguments=['-d'],
+        parameters=[{
+            **stereo_common_params,
+            'map_frame_id': 'map',
+            'publish_tf': True,
+            'subscribe_stereo': True,
+            'subscribe_depth': False,
+            'subscribe_rgb': False,
+            'subscribe_rgbd': False,
+            'subscribe_odom_info': True,
+            'Grid/FromDepth': 'true',
+            'Grid/RangeMax': '4.0',
+            'Grid/MaxGroundHeight': '0.05',
+            'Grid/MaxObstacleHeight': '0.40',
+            'Grid/RayTracing': 'true',
+            'RGBD/LinearUpdate': '0.05',
+            'RGBD/AngularUpdate': '0.05',
+        }],
+        remappings=stereo_remaps,
+    )
+
+    camera_brightness = Node(
+        package='camera_brightness',
+        executable='camera_brightness',
+        name='camera_brightness',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
+        remappings=[('/image', '/stereo/left/image_raw')],
+    )
+
     return LaunchDescription(declared_args + [
+        set_ign_resource_path,
         set_resource_path,
         set_model_path,
         gazebo,
         robot_state_publisher,
         spawn_robot,
         ros_gz_bridge,
+        stereo_odometry,
+        rtabmap,
+        camera_brightness,
     ])
