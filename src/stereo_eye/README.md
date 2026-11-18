@@ -209,13 +209,13 @@ A mesh export is a single static pose (wheels at 0). It doesn't carry links, joi
 Without ROS:
 ```bash
 pip install xacro
-cd stereo_eye
+cd /workspaces/ros2-dev/src/stereo_eye
 xacro urdf/stereo_eye.urdf.xacro > urdf/stereo_eye.urdf                      # with Gazebo tags
 xacro urdf/stereo_eye.urdf.xacro use_gazebo:=false > /tmp/stereo_eye_nogz.urdf  # simulator-free variant
 ```
 With ROS 2:
 ```bash
-cp -r stereo_eye ~/ws/src/ && cd ~/ws && colcon build --packages-select stereo_eye && source install/setup.bash
+cd /workspaces/ros2-dev && colcon build --packages-select stereo_eye && source install/setup.bash
 xacro $(ros2 pkg prefix stereo_eye)/share/stereo_eye/urdf/stereo_eye.urdf.xacro > stereo_eye.urdf
 check_urdf stereo_eye.urdf      # from liburdfdom-tools
 ```
