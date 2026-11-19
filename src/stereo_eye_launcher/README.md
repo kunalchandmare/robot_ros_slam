@@ -128,6 +128,187 @@ transform to **stereo_odometry** (`publish_tf` true) and lets **rtabmap** publis
 the bridge remaps it to `/wheel_odom` and does not bridge `/tf`.
 `robot_state_publisher` remains the source of `base_footprint` → camera frames.
 
+## Frames and the TF tree
+
+This section is for ROS beginners. It explains where the robot's frames come
+from, who publishes each one, and how to look at them yourself.
+
+### What a frame is
+
+A **frame** is a coordinate system: an origin point plus three axes, x, y and z.
+In RViz the axes are drawn as **red = x**, **green = y**, **blue = z**.
+
+Every part of the robot gets its own frame because every sensor and wheel
+measures things from its own point of view. The left camera sees a wall
+"2 m ahead of me", the IMU measures acceleration "along my own axes", and a
+wheel turns "around its own axle". To combine those measurements, ROS has to
+know where each part sits relative to the others.
+
+ROS convention (REP-103) for body frames such as `base_link`: x points forward,
+y points left, z points up. Distances are in metres, angles in radians.
+
+### What a transform is
+
+A **transform** between two frames is a **translation** (how far the origin
+moved, in x/y/z) plus a **rotation** (how the axes turned). With it you can take
+a point written in one frame and rewrite it in the other.
+
+Tiny example with this robot's real numbers. The left camera sees a point
+**2 m straight ahead**:
+
+1. In `camera_left_optical_frame` that point is `(0, 0, 2)`, because in an optical
+   frame z is "forward" (see below).
+2. Undo the optical rotation and it becomes `(2, 0, 0)` in `camera_left_link`
+   (x is forward there).
+3. `camera_left_link` sits at `(0.061, 0.04, 0.1975)` in `base_link`
+   (head 19.25 cm up, bar 6.1 cm forward and 0.5 cm up, left eye 4 cm left).
+4. Add that offset and the point is `(2.061, 0.04, 0.1975)` in `base_link`:
+   just over 2 m in front of the robot's centre, 4 cm to the left, about 20 cm up.
+
+You never do this maths by hand. The TF library does it for you.
+
+### How TF connects the frames
+
+**TF** (the `tf2` library) is the ROS system that keeps track of all transforms.
+Every frame has **exactly one parent**, and each link stores only "where am I
+relative to my parent". Because each frame has one parent, the frames form a
+**tree**. To convert between any two frames, TF walks the tree from one frame up
+to their common ancestor and back down, and chains the transforms on the way.
+
+Transforms travel on two topics:
+
+- `/tf_static` carries transforms that never change (bolted-on parts). They are
+  sent once and latched, so late subscribers still get them.
+- `/tf` carries transforms that move (wheels, odometry). They are re-sent
+  continuously with fresh timestamps.
+
+This is the tree for this robot. Offsets are checked against
+`src/stereo_eye/urdf/stereo_eye.urdf.xacro`:
+
+```mermaid
+graph TD
+  map -->|"rtabmap: drift correction (/tf)"| odom
+  odom -->|"stereo_odometry: distance driven (/tf)"| base_footprint
+  base_footprint -->|"fixed: up 6.5 cm"| base_link
+  base_link -->|"wheel angle, left 9.5 cm (/tf)"| left_wheel_link
+  base_link -->|"wheel angle, right 9.5 cm (/tf)"| right_wheel_link
+  base_link -->|"fixed: back 7.5 cm, down 4.75 cm"| caster_link
+  base_link -->|"fixed: up 1 cm"| imu_link
+  base_link -->|"fixed: up 19.25 cm"| head_link
+  head_link -->|"fixed: forward 6.1 cm, up 0.5 cm"| stereo_bar_link
+  stereo_bar_link -->|"fixed: same spot"| camera_link
+  stereo_bar_link -->|"fixed: left 4 cm"| camera_left_link
+  stereo_bar_link -->|"fixed: right 4 cm"| camera_right_link
+  camera_left_link -->|"fixed: rotate to optical"| camera_left_optical_frame
+  camera_right_link -->|"fixed: rotate to optical"| camera_right_optical_frame
+```
+
+Some notes on the tree:
+
+- `base_footprint` is the point on the floor under the robot. `base_link` sits
+  6.5 cm above it, on the wheel axle (6.5 cm is the wheel radius).
+- The wheel joints are also rotated by -90° around x, so each wheel's own z axis
+  is its axle. That is why a spinning wheel looks like a rotating frame in RViz.
+- The caster ball is 7.5 cm behind the axle and its centre is 4.75 cm below
+  `base_link`, so it touches the floor.
+
+### Who publishes what
+
+| Link(s) | Publisher | Topic | How |
+|---|---|---|---|
+| All fixed links (`base_footprint` → `base_link` → head, bar, cameras, IMU, caster) | `robot_state_publisher` | `/tf_static` | Reads the URDF that `xacro` builds from `stereo_eye.urdf.xacro` |
+| `base_link` → `left_wheel_link`, `right_wheel_link` | `robot_state_publisher` | `/tf` | Uses the wheel angles in `/joint_states`, bridged from Gazebo |
+| `odom` → `base_footprint` | `stereo_odometry` (rtabmap_odom) | `/tf` | Estimates how far the robot has moved from the camera images |
+| `map` → `odom` | `rtabmap` (rtabmap_slam) | `/tf` | Drift correction: shifts `odom` when a loop closure shows it has drifted |
+
+Why two layers above the robot? `odom` is smooth but slowly drifts, because small
+errors add up. `map` is globally correct but can jump when rtabmap recognises a
+place it has seen before. Keeping them as separate links lets each node own one
+transform, so they never fight. See also [TF ownership](#tf-ownership).
+
+**Everything uses sim time.** Every node in this launch runs with
+`use_sim_time: true`, so timestamps come from Gazebo's `/clock`, not the wall
+clock. If one node used wall time, TF would reject its lookups as "too far in
+the future" or "too old", which is why you should not start a bare `rviz2`.
+
+### The optical frame rotation
+
+Cameras and image libraries use a different convention from robot bodies. In an
+**optical frame**:
+
+- **z points forward**, out of the lens
+- **x points right**, along the image rows
+- **y points down**, along the image columns
+
+That matches how pixels are numbered: column grows to the right, row grows
+downwards, and depth is "into the picture". Camera drivers, `camera_info` and
+the stereo maths all expect this.
+
+So each camera has two frames at the same spot:
+
+- `camera_*_link` follows the robot convention (x forward, y left, z up), which is
+  easy to reason about and place in the URDF.
+- `camera_*_optical_frame` is the same point, rotated with `rpy = (-90°, 0, -90°)`
+  into the optical convention. The images are stamped with this frame
+  (`ignition_frame_id` / `gz_frame_id` in `stereo_eye.gazebo.xacro`).
+
+If you stamp images with the wrong one of the two, the point cloud will appear
+rotated: a wall in front of the robot will show up as a floor or ceiling.
+
+### Why this matters for stereo
+
+The two cameras are 8 cm apart (the **baseline**, B = 0.08 m), each 4 cm either
+side of `stereo_bar_link`. They see the same scene from slightly different
+places, so a nearby object appears shifted sideways between the left and right
+image. That shift in pixels is the **disparity** (d). Depth follows from it:
+
+$$
+Z = \frac{f_x \cdot B}{d}
+$$
+
+Here \( f_x \approx 687 \) px (1280 px wide, 1.5 rad field of view), so
+\( f_x \cdot B \approx 54.96 \) px·m. That is the `-54.96` you see in
+`P[3]` of the right camera's `camera_info`. For example:
+
+- an object 1 m away has a disparity of about 55 px
+- an object 2 m away has a disparity of about 27.5 px
+- at 2 m, a 1-pixel matching error changes the depth by about 7 cm
+
+The stereo maths only works if TF knows the exact baseline and that both
+cameras are parallel. That is why both cameras hang off one rigid
+`stereo_bar_link` with fixed joints. If the TF tree had the wrong offset, every
+depth and every odometry step would be wrong by the same factor.
+
+### Try it yourself
+
+With the simulation running (in another terminal, after sourcing
+`/workspaces/ros2-dev/install/setup.bash`):
+
+1. Draw the whole tree to a PDF:
+
+   ```bash
+   ros2 run tf2_tools view_frames
+   ```
+
+   This listens for about 5 seconds and writes `frames_<date>.pdf` (and a `.gv`
+   file) in the current folder. Open the PDF to see every frame, its parent,
+   who publishes it and how often.
+
+2. Ask TF for one transform:
+
+   ```bash
+   ros2 run tf2_ros tf2_echo stereo_bar_link camera_left_link
+   ```
+
+   It should print a translation of `[0.000, 0.040, 0.000]` (4 cm to the left)
+   and no rotation. Swap in `camera_right_link` and you get `[0.000, -0.040, 0.000]`.
+   Try `base_link camera_left_optical_frame` to see the optical rotation as well.
+
+3. Look at it in RViz. The launch file's RViz already has a **TF** display. In
+   the Displays panel, expand **TF** and tick **Show Names** (and **Show Axes**)
+   to see each frame's name and its red/green/blue axes. Drive with teleop and
+   watch the wheel frames spin and `base_footprint` move away from `odom`.
+
 ## RViz
 
 Do **not** run a bare `rviz2`. A plain RViz session uses wall time, while every
