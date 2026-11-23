@@ -229,6 +229,12 @@ def generate_launch_description():
         'Stereo/MaxDisparity': '160',
     }
 
+    # Odom/ResetCountdown 1: when visual odometry gets lost ("Not enough
+    # inliers", quality 0), reset it on the very next frame instead of staying
+    # lost forever. Without it, rtabmap keeps printing "no odometry is
+    # provided, image ignored" and the map freezes. After a reset, rtabmap
+    # starts a new map session and links it to the old one through loop
+    # closure once the robot sees a known place again.
     stereo_odometry = Node(
         package='rtabmap_odom',
         executable='stereo_odometry',
@@ -238,6 +244,7 @@ def generate_launch_description():
             **stereo_common_params,
             'odom_frame_id': 'odom',
             'publish_tf': True,
+            'Odom/ResetCountdown': '1',
         }],
         remappings=stereo_remaps,
     )

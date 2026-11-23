@@ -419,6 +419,24 @@ ros2 run tf2_ros tf2_echo map base_footprint
 Do not start a bare `rviz2` from this list. Use the launch file's RViz node, or
 see the RViz section below if you need to start it by hand.
 
+## Troubleshooting
+
+**Visual odometry gets lost and the map freezes.** Signs are
+`Not enough inliers 0/20` and `quality=0` from `stereo_odometry`, followed by
+`no odometry is provided, image ignored` from `rtabmap`. The launch sets
+`Odom/ResetCountdown` to `1`, so `stereo_odometry` resets itself on the next
+frame after it gets lost. `rtabmap` then starts a new map session and joins it
+to the old map through loop closure when the robot sees a known place again.
+
+To reset odometry by hand:
+
+```bash
+ros2 service call /reset_odom std_srvs/srv/Empty
+```
+
+Tip: turn slowly, especially in front of plain walls. Fast turns change the view
+too much between frames, so the stereo matcher finds no features in common.
+
 ## Known limitations
 
 - **Topic prefixes.** Topic names in the robot xacro are relative. If Gazebo publishes
