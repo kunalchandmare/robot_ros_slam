@@ -10,7 +10,7 @@ Simulation worlds, launch files, bridges and SLAM configuration are deliberately
 
 The design is based on the user's reference robot: a boxy, white/light-grey "mecha" torso with blue accent stripes,
 a vented front chest panel, and a wide flat head bar on a short neck. For a mapping platform, the **legs and arms are removed**.
-The torso sits directly between two big drive wheels, with a small caster ball at the back.
+The torso sits directly between two big drive wheels, with a small caster ball at the back and a matching one at the front (so a hard stop cannot tip it onto its face).
 
 How it was made cute:
 
@@ -23,6 +23,7 @@ How it was made cute:
 | Twin antennas | Thin grey rods tilted outward, each with a blue ball tip |
 | Reference styling | A blue collar band near the top and a blue bumper band at the bottom, a light-grey chest panel with 3 dark vent slits, blue vertical stripes on each side of the panel, a small sky-blue status light, a grey shoulder cap and a blue neck |
 | Wheels | Dark tyres, blue hubs, white hub caps |
+| Twin caster balls | A dark ball and a light-grey housing at both the front and the back, like little feet |
 
 All visuals use **primitives only** (box / cylinder / sphere), so the URDF opens anywhere without mesh files.
 
@@ -30,7 +31,7 @@ All visuals use **primitives only** (box / cylinder / sphere), so the URDF opens
 
 | Quantity | Value |
 |---|---|
-| Length (x), wheel front to caster back | 16.2 cm |
+| Length (x), front-caster front to rear-caster back | 18.5 cm |
 | Width (y), head bar incl. ear lights (widest part) | 25.5 cm |
 | Width across wheel outer faces | 22.0 cm |
 | Height to head top / to antenna tips | 30.5 cm / 34.2 cm |
@@ -38,7 +39,7 @@ All visuals use **primitives only** (box / cylinder / sphere), so the URDF opens
 | Shoulder cap / neck | 1 cm cap (18-19 cm); neck cylinder r 2.2 cm (19-21 cm) |
 | Head | 9.0 (x) × 15.0 cm flat core + two r 4.75 cm round ends (24.5 cm wide) × 9.5 cm tall, from 21 cm to 30.5 cm |
 | Ground clearance (torso) | 3.0 cm |
-| Total mass | 3.16 kg |
+| Total mass | 4.06 kg |
 
 ## 3. Link / joint tree
 
@@ -48,6 +49,8 @@ graph TD
   BL -->|left_wheel_joint continuous| LW[left_wheel_link]
   BL -->|right_wheel_joint continuous| RW[right_wheel_link]
   BL -->|caster_joint fixed| CA[caster_link]
+  BL -->|front_caster_joint fixed| FC[front_caster_link]
+  BL -->|ballast_joint fixed| BA[ballast_link]
   BL -->|imu_joint fixed| IMU[imu_link]
   BL -->|head_joint fixed| HD[head_link]
   HD -->|stereo_bar_joint fixed| BAR[stereo_bar_link]
@@ -61,9 +64,11 @@ graph TD
 | Frame | Pose (relative to its parent) | Purpose |
 |---|---|---|
 | `base_footprint` | root, on the ground under the axle centre | 2D robot pose for navigation/SLAM (`frame_id` for RTAB-Map); child of `odom` at runtime |
-| `base_link` | z = +0.065 (axle height) | Main body. Carries the torso, bands, chest panel, cap, neck and caster housing visuals, the torso collision box and the torso+battery mass |
+| `base_link` | z = +0.065 (axle height) | Main body. Carries the torso, bands, chest panel, cap, neck and both caster-housing visuals, the torso collision box and the light torso-shell mass |
 | `left_wheel_link` / `right_wheel_link` | y = ±0.095, rpy (−π/2, 0, 0), axis z | Drive wheels. The rotation makes both wheel z-axes point to +y, so a positive joint velocity drives forward on both sides |
-| `caster_link` | x = −0.075, z = −0.0475 (sphere touches the ground) | Rear support ball (fixed; frictionless in Gazebo) |
+| `caster_link` | x = −0.075, z = −0.0475 (sphere touches the ground) | Rear support ball (fixed; low friction μ = 0.01 in Gazebo) |
+| `front_caster_link` | x = +0.075, z = −0.0475 (sphere touches the ground) | Front support ball / skid (fixed; same size and μ = 0.01). Stops the robot pitching onto its face |
+| `ballast_link` | x = −0.025, z = −0.010 in `base_link` (5.5 cm above the ground) | Internal 2.40 kg battery pack on the torso floor (no visual or collision; it sits inside the shell) |
 | `imu_link` | z = +0.01, on the axle centreline | IMU mounting point, near the rotation centre to reduce centripetal acceleration |
 | `head_link` | z = +0.1925 | Head bar with the eye, cheeks, ears and antennas; head collision box and head mass |
 | `stereo_bar_link` | x = +0.061, z = +0.005 from the head centre | **Rigid stereo bar** that carries both cameras (and the lens visuals and the camera mass). The origin is at the lens front, midway between the lenses. x forward |
@@ -73,33 +78,88 @@ graph TD
 
 All joints are fixed except the two continuous wheel joints (effort 2 N·m, velocity 15 rad/s, damping 0.01).
 
-## 4. Drive geometry
+## 4. Drive geometry and tip-over stability
 
 | Parameter | Value |
 |---|---|
 | Wheel radius / width | 0.065 m / 0.030 m |
 | Wheel separation (centre to centre) | 0.190 m |
 | Gap between wheel and torso side | 5 mm |
-| Caster | Rear ball r = 0.0175 m at x = −0.075 m |
-| Support polygon | Triangle formed by the two wheel contacts (x = 0) and the caster (x = −0.075) |
+| Rear caster | Ball r = 0.0175 m at x = −0.075 m, μ = 0.01 |
+| Front caster / skid | Same ball at x = +0.075 m, μ = 0.01 |
+| Support polygon | Quadrilateral: the two wheel contacts (x = 0, y = ±0.095) plus the front and rear casters (x = ±0.075, y = 0) |
+| Wheel friction | μ = 1.2, with contact kp = 1e6, kd = 100, minDepth = 0.001 (same contact numbers on the casters) |
+| DiffDrive command limits | ±0.3 m/s, ±1.0 rad/s, ±0.5 m/s², ±1.5 rad/s² |
 
-**Why the COM is behind the axle.** With only two wheels and one rear caster, the robot stands stably only if the
-centre of mass lies *inside* the support triangle, between the axle (x = 0) and the caster (x = −0.075).
-The head and camera sit forward of the axle. To compensate, the torso box is offset 2 cm rearward, and the torso's
-inertial origin (battery, motors, computer) is placed low and further back, at (−0.03, 0, +0.01) relative to `base_link`.
-The resulting overall COM is **x = −2.1 cm, z = 9.6 cm** above the ground. It is well behind the axle, so the robot rests on
-the caster, and it is low enough that moderate braking doesn't tip it forward.
+**Why it tipped onto its face.** The first model had only a rear caster. The two drive wheels and that one
+rear ball made a support *triangle* whose front edge was the wheel axle (x = 0). Nothing in front of the
+axle touched the ground. The centre of mass sat only 2.1 cm behind that axle, 9.6 cm above the ground.
+When you brake (or command a sudden reverse) while driving forward, the robot's own inertia pushes its
+weight *forward*. If that weight line crosses the front edge of the support polygon, the robot pitches
+onto its face. Once the head is on the floor, the drive wheels are in the air, so teleop cannot pick it
+back up. That is what happened in Gazebo.
+
+**Centre of mass (COM)** is the balance point of all the mass, as if the whole robot were a single
+weight hanging there. **Support polygon** is the shape on the floor between the points that actually
+touch the ground. The robot stands still only while a vertical line through the COM hits the floor
+*inside* that shape, with some margin.
+
+**The braking-tilt check.** A forward deceleration *a* is equivalent to tilting gravity toward the
+front by θ = atan(*a*/*g*). The weight line then hits the floor at
+
+&nbsp;&nbsp;&nbsp;&nbsp;x_hit = x_COM + z_COM · (*a* / *g*)
+
+(with *g* = 9.81 m/s²). We require x_hit to stay behind the front edge of the support polygon at
+*a* = 0.5 m/s² (θ ≈ 2.9°), which is also the DiffDrive linear-acceleration limit. The same idea going
+the other way (accelerating forward) is x_hit = x_COM − z_COM · (*a* / *g*), and that point must stay
+ahead of the rear caster.
+
+| | Before (rear caster only) | After (front + rear casters, lower COM) |
+|---|---|---|
+| Total mass | 3.160 kg | **4.060 kg** |
+| COM in `base_footprint` | (−0.0212, 0, 0.0963) m | **(−0.0180, 0, 0.0782) m** |
+| Front edge of the support polygon | axle, x = 0 | front caster, x = +0.075 m |
+| Static forward margin (x_front − x_COM) | 2.12 cm | **9.30 cm** |
+| Static rearward margin (x_COM − x_rear) | 5.38 cm | **5.70 cm** |
+| Forward braking at 0.5 m/s² (x_front − x_hit) | 1.63 cm (tight) | **8.91 cm** |
+| Forward accel at 0.5 m/s² (x_hit − x_rear) | 4.89 cm | **5.30 cm** |
+
+The 1.6 cm braking margin of the old model was not enough. A bump, a collision, or a hard teleop
+press could push the weight line past the axle, and with no front support the fall could not be
+caught. Just lowering the COM, without a front caster, would have left only about 1.4 cm of forward
+braking margin (the new COM is also a few millimetres closer to the axle). The front caster is the
+real fix: it moves the front edge 7.5 cm forward of the axle, so the same 0.5 m/s² stop has nearly
+9 cm of margin. The ball is the same size as the rear one, sits under the front of the torso (the
+visor stays well above the ground if the robot leans onto it), and uses the same low friction so a
+fixed, non-swivelling ball does not drag the heading or fight the differential drive. The drive
+wheels keep high friction (μ = 1.2) so they can actually apply the commanded speed.
+
+**How the COM was lowered.** The 2.20 kg torso mass used to include the battery, and the head was
+0.35 kg of mass high up on the neck. The torso shell is now a light 0.80 kg body whose inertia sits
+at the geometric centre of the box. A separate 2.40 kg `ballast_link` (a 12 × 13 × 5 cm battery pack
+and chassis plate, density about 3077 kg/m³) sits on the *floor* of the torso, 5.5 cm above the
+ground and 2.5 cm behind the axle. The head was lightened to 0.20 kg (hollow plastic). The cameras
+stay 0.06 kg. The net result: 1.8 cm lower COM (9.63 cm → 7.82 cm) and a 0.90 kg mass increase.
+
+**What the velocity and acceleration limits do.** They do **not** change the physics of the body.
+They cap the *twist command* inside the DiffDrive plugin (ign-gazebo6 elements
+`max/min_linear_velocity`, `max/min_angular_velocity`, `max/min_linear_acceleration`,
+`max/min_angular_acceleration`). A hard teleop key press is clamped to 0.3 m/s and 1.0 rad/s, and
+the plugin may only ramp those speeds at 0.5 m/s² and 1.5 rad/s². That is why a key slam cannot
+demand a harder stop than the support-polygon check above. The previous limits were 0.6 m/s,
+2.0 rad/s, 1.0 m/s² and 3.0 rad/s².
 
 ## 5. Mass budget and inertia
 
 | Link | Mass (kg) | Inertia primitive | Ixx / Iyy / Izz (kg·m²) |
 |---|---|---|---|
-| base_link (torso shell + battery + motors + SBC) | 2.20 | box 0.14 × 0.15 × 0.15 | 0.008250 / 0.007718 / 0.007718 |
-| head_link (head shell + neck) | 0.35 | box 0.09 × 0.245 × 0.095 | 0.002014 / 0.000499 / 0.001987 |
+| base_link (torso shell) | 0.80 | box 0.14 × 0.15 × 0.15 | 0.003000 / 0.002807 / 0.002807 |
+| ballast_link (battery pack + chassis plate, on the torso floor) | 2.40 | box 0.12 × 0.13 × 0.05 | 0.003880 / 0.003380 / 0.006260 |
+| head_link (hollow plastic head) | 0.20 | box 0.09 × 0.245 × 0.095 | 0.001151 / 0.000285 / 0.001135 |
 | stereo_bar_link (bar + both camera modules) | 0.06 | box 0.025 × 0.11 × 0.03 | 6.5e-5 / 7.6e-6 / 6.4e-5 |
 | left / right wheel | 2 × 0.25 | solid cylinder r 0.065, h 0.03 | 0.000283 / 0.000283 / 0.000528 (axis z) |
-| caster_link | 0.05 | solid sphere r 0.0175 | 6e-6 each |
-| **Total** | **3.16** | | |
+| caster_link / front_caster_link | 2 × 0.05 | solid sphere r 0.0175 | 6e-6 each |
+| **Total** | **4.06** | | |
 
 The inertias are computed by the xacro macros from the standard solid-primitive formulas:
 
@@ -148,22 +208,22 @@ comes into view about 0.50 m in front of the robot. Full stereo design, topics a
 1. **Argument**: `use_gazebo` (default `true`), which includes the optional Gazebo file.
 2. **Properties**: every dimension in one place: `wheel_radius`, `wheel_width`, `wheel_separation`, `torso_x/y/z`,
    `torso_r`, `torso_off_x`, `ground_clear`, `head_x`, `head_core_y`, `head_z`, `neck_r/h`, `cap_h`, eye sizes (`eye_half`, `rim_r`, `bezel_r`, `glass_r`, `lens_r`, `eye_z`),
-   camera (`stereo_baseline`, `cam_w`, `cam_h`, `cam_fps`, `cam_hfov`, `cam_near`, `cam_far`; `cam_fx`, `cam_cx`, `cam_cy`, `cam_tx_right` are **derived**), caster (`caster_r`, `caster_x`), and masses.
+   camera (`stereo_baseline`, `cam_w`, `cam_h`, `cam_fps`, `cam_hfov`, `cam_near`, `cam_far`; `cam_fx`, `cam_cx`, `cam_cy`, `cam_tx_right` are **derived**), casters (`caster_r`, `caster_x`, `front_caster_x`) and ballast (`ballast_mass`, `ballast_x/y/z`, `ballast_off_x`), and masses.
    Derived heights (`torso_cz`, `torso_top`, `head_cz`, `cam_front_x`) are computed, so the stack stays connected when you change a size.
 3. **Materials**: the 8 colours above.
 4. **Inertial macros**: `box_inertial`, `cylinder_inertial`, `sphere_inertial` (mass + dimensions + origin block).
 5. **Visual helper macros**: `rounded_box_visual` (+ `rounded_corner`), `front_disc` (a disc facing +x), `vbox`.
 6. **`drive_wheel` macro** (`prefix`, `reflect`): wheel link (tyre/hub/cap visuals, cylinder collision, inertia), continuous joint
-   and Gazebo friction (`mu1 = mu2 = 1.0`).
+   and Gazebo friction (`mu1 = mu2 = 1.2`, via `gazebo_ode_contact`).
 7. **`stereo_eye` macro** (`side`, `reflect`): eye link + optical frame.
-8. **Links and joints**: base_footprint → base_link → wheels, caster, imu, head → camera.
+8. **Links and joints**: base_footprint → base_link → wheels, rear/front casters, ballast, imu, head → camera.
 
 Examples:
 * Bigger wheels: change `wheel_radius`. Everything above the axle moves with it, and the caster offset is recalculated.
 * A different camera (e.g. OAK-D Lite, 75 mm): set `stereo_baseline`, `cam_hfov`, `cam_w`, `cam_h`, and `cam_fx` and `cam_tx_right` update automatically. For baselines above about 9 cm, also widen `eye_half` so the lenses stay inside the visor.
-* Heavier battery: change `torso_mass` (and recheck that the COM stays behind the axle).
+* Heavier battery: change `ballast_mass` (and recheck that the COM stays inside the support polygon, between the two casters).
 
-Collision geometry is kept simple: torso box, head box, wheel cylinders, caster sphere.
+Collision geometry is kept simple: torso box, head box, wheel cylinders, two caster spheres.
 
 ## 9. Optional Gazebo file (`urdf/stereo_eye.gazebo.xacro`)
 
@@ -174,10 +234,10 @@ simulator-agnostic. It declares:
 |---|---|
 | `stereo_left`, `stereo_right` camera sensors | On `camera_left_link` / `camera_right_link`: 640×360, 24 Hz (same rate, so same stamps), HFOV 1.5, clip 0.05–15 m, Gaussian noise σ 0.005, identical lens intrinsics + projection (right Tx = −27.48), topics `stereo/{left,right}/image_raw` + `stereo/{left,right}/camera_info`; frame = the optical frame via both `<ignition_frame_id>` (Fortress, ign-sensors 6.2+) and `<gz_frame_id>` (Garden/Harmonic) |
 | `imu_sensor` | On `imu_link` (both frame tags), 100 Hz, topic `imu`, gyro σ 0.0009 rad/s, accel σ 0.017 m/s² |
-| DiffDrive plugin | `left/right_wheel_joint`, separation 0.19, radius 0.065, limits ±0.6 m/s, ±2 rad/s, ±1 m/s², ±3 rad/s²; `cmd_vel` → `odom` + `tf` (odom → base_footprint) at 30 Hz |
+| DiffDrive plugin | `left/right_wheel_joint`, separation 0.19, radius 0.065, limits ±0.3 m/s, ±1.0 rad/s, ±0.5 m/s², ±1.5 rad/s²; `cmd_vel` → `odom` + `wheel_tf` (odom → base_footprint) at 30 Hz. On gz (Fortress / ign-gazebo6) the absolute topic names are `/odom` and `/wheel_tf` (relative plugin names, not scoped under `/model/stereo_eye/`) |
 | JointStatePublisher plugin | Publishes both wheel joints on `joint_states` |
 
-The wheel and caster friction tags (`mu1`/`mu2`) live in the main xacro, next to their links. They are ignored by non-Gazebo tools.
+The wheel and caster friction tags (`mu1`/`mu2`/`kp`/`kd`/`minDepth`) live in the main xacro, next to their links. Fortress's URDF-to-SDF conversion maps those Gazebo-extension tags onto the collision `<surface>` friction and contact parameters. They are ignored by non-Gazebo tools.
 The world must load the `Sensors` (ogre2) and `Imu` systems for the cameras and IMU to publish. That belongs to the simulation package, not here.
 
 ## 10. Export files and why
@@ -227,11 +287,12 @@ The Gazebo file is included by relative path, so expansion works from both the s
 ```
 robot name is: stereo_eye
 root Link: base_footprint
-  base_link ─ left_wheel_link [continuous], right_wheel_link [continuous], caster_link, imu_link,
+  base_link ─ left_wheel_link [continuous], right_wheel_link [continuous], caster_link, front_caster_link,
+              ballast_link, imu_link,
               head_link ─ stereo_bar_link ─ camera_link
                                           ├ camera_left_link ─ camera_left_optical_frame
                                           └ camera_right_link ─ camera_right_optical_frame
-links: 13  joints: 12  total mass: 3.160 kg  COM: (-0.0212, 0, 0.0963) m
+links: 15  joints: 14  total mass: 4.060 kg  COM: (-0.0180, 0, 0.0782) m
 inertia tensors positive & triangle inequality: True
 optical frames: z = forward, x = right, y = down for both cameras; stereo baseline 0.080 m (TF) = -Tx/fx
 both camera sensors: identical 640x360, 24 Hz, HFOV 1.5, fx = fy = 343.50, cx = 320, cy = 180

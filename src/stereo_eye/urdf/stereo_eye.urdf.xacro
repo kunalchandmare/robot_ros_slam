@@ -7,7 +7,9 @@
 
   Frames (REP-105 / REP-103):
     base_footprint -> base_link -> {left,right}_wheel_link (continuous)
-                                -> caster_link (fixed)
+                                -> caster_link (fixed, rear)
+                                -> front_caster_link (fixed, front skid/caster)
+                                -> ballast_link (fixed, low battery pack)
                                 -> imu_link (fixed)
                                 -> head_link (fixed) -> stereo_bar_link (fixed, rigid stereo bar)
                                                           -> camera_link (stereo centre)
@@ -35,7 +37,7 @@
   <xacro:property name="torso_r"      value="0.025"/>  <!-- corner radius -->
   <xacro:property name="torso_off_x"  value="-0.020"/>
   <xacro:property name="ground_clear" value="0.030"/>
-  <xacro:property name="torso_mass"   value="2.20"/>   <!-- incl. battery, SBC, motors -->
+  <xacro:property name="torso_mass"   value="0.80"/>   <!-- light shell only; battery mass is ballast_link -->
   <!-- torso centre height relative to base_link (axle) -->
   <xacro:property name="torso_cz" value="${ground_clear + torso_z/2 - wheel_radius}"/>
   <xacro:property name="torso_top" value="${torso_cz + torso_z/2}"/>
@@ -50,7 +52,7 @@
   <xacro:property name="head_core_y" value="0.150"/>  <!-- flat middle part -->
   <xacro:property name="head_z"     value="0.095"/>   <!-- height; ends are cylinders r=head_z/2 -->
   <xacro:property name="head_off_x" value="0.000"/>
-  <xacro:property name="head_mass"  value="0.35"/>
+  <xacro:property name="head_mass"  value="0.20"/>   <!-- hollow plastic head, kept light so the COM stays low -->
   <xacro:property name="head_cz"    value="${torso_top + cap_h + neck_h + head_z/2}"/>
 
   <!-- Eye = stereo pair. The single cute eye is a wide "visor" (stadium shape) that holds both lenses. -->
@@ -78,10 +80,25 @@
   <!-- stereo bar origin = lens front plane, midway between the lenses (head frame) -->
   <xacro:property name="cam_front_x" value="${head_x/2 + bezel_len - 0.002 + 0.006}"/>
 
-  <!-- Caster ball (rear) -->
+  <!-- Caster balls: rear support + a matching front skid/caster.
+       A rear-only caster leaves the axle as the front edge of the support polygon,
+       so forward braking can pitch the robot onto its face. The front caster extends
+       the polygon ahead of the axle. Both are fixed (no swivel) with very low friction. -->
   <xacro:property name="caster_r"    value="0.0175"/>
   <xacro:property name="caster_x"    value="-0.075"/>
   <xacro:property name="caster_mass" value="0.05"/>
+  <xacro:property name="front_caster_x"    value="0.075"/>
+  <xacro:property name="front_caster_mass" value="0.05"/>
+
+  <!-- Low battery / chassis ballast, sitting on the torso floor. Dense pack + base plate
+       (2.40 kg in 0.120 x 0.130 x 0.050 m, ~3077 kg/m^3). Keeps the COM low. -->
+  <xacro:property name="ballast_mass"  value="2.40"/>
+  <xacro:property name="ballast_x"     value="0.120"/>
+  <xacro:property name="ballast_y"     value="0.130"/>
+  <xacro:property name="ballast_z"     value="0.050"/>
+  <xacro:property name="ballast_off_x" value="-0.025"/>
+  <!-- torso floor in base_link is torso_cz - torso_z/2; ballast centre is half its height above that -->
+  <xacro:property name="ballast_off_z" value="${torso_cz - torso_z/2 + ballast_z/2}"/>
 
   <!-- ===================== MATERIALS ===================== -->
   <material name="se_white"><color rgba="0.96 0.96 0.97 1.0"/></material>
@@ -123,6 +140,20 @@
                iyy="${2.0*m*r*r/5.0}" iyz="0"
                izz="${2.0*m*r*r/5.0}"/>
     </inertial>
+  </xacro:macro>
+
+  <!-- Fortress / sdformat URDF-to-SDF honours these <gazebo> tags (mu1/mu2/kp/kd/minDepth)
+       and maps them onto the collision <surface><friction><ode> and <surface><contact><ode>
+       elements. That is why we use the tag names rather than writing <surface> inside the
+       URDF collision (plain URDF has no surface element). -->
+  <xacro:macro name="gazebo_ode_contact" params="link mu kp:=1000000.0 kd:=100.0 min_depth:=0.001">
+    <gazebo reference="${link}">
+      <mu1>${mu}</mu1>
+      <mu2>${mu}</mu2>
+      <kp>${kp}</kp>
+      <kd>${kd}</kd>
+      <minDepth>${min_depth}</minDepth>
+    </gazebo>
   </xacro:macro>
 
   <!-- ===================== VISUAL HELPER MACROS ===================== -->
@@ -218,13 +249,8 @@
       <dynamics damping="0.01" friction="0.0"/>
     </joint>
 
-    <gazebo reference="${prefix}_wheel_link">
-      <mu1>1.0</mu1>
-      <mu2>1.0</mu2>
-      <kp>1000000.0</kp>
-      <kd>100.0</kd>
-      <minDepth>0.001</minDepth>
-    </gazebo>
+    <!-- Drive wheels keep high friction so they can apply the commanded speed without slipping. -->
+    <xacro:gazebo_ode_contact link="${prefix}_wheel_link" mu="1.2"/>
   </xacro:macro>
 
   <!-- One camera of the stereo pair, rigidly mounted on the stereo bar, + its REP-103 optical frame.
@@ -283,9 +309,14 @@
       <geometry><cylinder radius="${neck_r}" length="${neck_h + 0.004}"/></geometry>
       <material name="se_blue"/>
     </visual>
-    <!-- Caster housing -->
+    <!-- Rear and front caster housings -->
     <visual name="caster_housing">
       <origin xyz="${caster_x} 0 ${torso_cz - torso_z/2 - 0.004}" rpy="0 0 0"/>
+      <geometry><cylinder radius="${caster_r + 0.004}" length="0.010"/></geometry>
+      <material name="se_light_grey"/>
+    </visual>
+    <visual name="front_caster_housing">
+      <origin xyz="${front_caster_x} 0 ${torso_cz - torso_z/2 - 0.004}" rpy="0 0 0"/>
       <geometry><cylinder radius="${caster_r + 0.004}" length="0.010"/></geometry>
       <material name="se_light_grey"/>
     </visual>
@@ -295,9 +326,9 @@
       <geometry><box size="${torso_x} ${torso_y} ${torso_z}"/></geometry>
     </collision>
 
-    <!-- Torso mass incl. battery: COM placed low and slightly rearward for caster stability -->
+    <!-- Torso shell only; the heavy battery lives on ballast_link, low on the torso floor. -->
     <xacro:box_inertial m="${torso_mass}" x="${torso_x}" y="${torso_y}" z="${torso_z}">
-      <origin xyz="${torso_off_x - 0.010} 0 ${torso_cz - 0.030}" rpy="0 0 0"/>
+      <origin xyz="${torso_off_x} 0 ${torso_cz}" rpy="0 0 0"/>
     </xacro:box_inertial>
   </link>
 
@@ -325,12 +356,45 @@
     <child link="caster_link"/>
     <origin xyz="${caster_x} 0 ${caster_r - wheel_radius}" rpy="0 0 0"/>
   </joint>
-  <gazebo reference="caster_link">
-    <mu1>0.0</mu1>
-    <mu2>0.0</mu2>
-    <kp>1000000.0</kp>
-    <kd>100.0</kd>
-  </gazebo>
+  <!-- Low friction so a fixed (non-swivel) ball does not fight turning or drag the heading. -->
+  <xacro:gazebo_ode_contact link="caster_link" mu="0.01"/>
+
+  <!-- Front caster / skid: same ball as the rear, under the front of the torso. Extends the
+       support polygon to x = +0.075 so forward braking cannot pitch the robot past the axle
+       onto its face. -->
+  <link name="front_caster_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><sphere radius="${caster_r}"/></geometry>
+      <material name="se_dark"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><sphere radius="${caster_r}"/></geometry>
+    </collision>
+    <xacro:sphere_inertial m="${front_caster_mass}" r="${caster_r}">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:sphere_inertial>
+  </link>
+  <joint name="front_caster_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="front_caster_link"/>
+    <origin xyz="${front_caster_x} 0 ${caster_r - wheel_radius}" rpy="0 0 0"/>
+  </joint>
+  <xacro:gazebo_ode_contact link="front_caster_link" mu="0.01"/>
+
+  <!-- Internal battery / chassis ballast on the torso floor. No visual or collision: it sits
+       inside the torso shell. Inertia is a solid box matching the pack size. -->
+  <link name="ballast_link">
+    <xacro:box_inertial m="${ballast_mass}" x="${ballast_x}" y="${ballast_y}" z="${ballast_z}">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:box_inertial>
+  </link>
+  <joint name="ballast_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="ballast_link"/>
+    <origin xyz="${ballast_off_x} 0 ${ballast_off_z}" rpy="0 0 0"/>
+  </joint>
 
   <!-- IMU (centre of the torso, on the axle line) -->
   <link name="imu_link"/>

@@ -110,17 +110,25 @@
       <right_joint>right_wheel_joint</right_joint>
       <wheel_separation>${wheel_separation}</wheel_separation>
       <wheel_radius>${wheel_radius}</wheel_radius>
-      <max_linear_acceleration>1.0</max_linear_acceleration>
-      <min_linear_acceleration>-1.0</min_linear_acceleration>
-      <max_angular_acceleration>3.0</max_angular_acceleration>
-      <min_angular_acceleration>-3.0</min_angular_acceleration>
-      <max_linear_velocity>0.6</max_linear_velocity>
-      <min_linear_velocity>-0.6</min_linear_velocity>
-      <max_angular_velocity>2.0</max_angular_velocity>
-      <min_angular_velocity>-2.0</min_angular_velocity>
+      <!-- Limits (ign-gazebo6 DiffDrive.cc element names). These cap the *commanded*
+           twist, so a hard teleop key press cannot slam the robot into a tip-over.
+           Linear: walk-pace 0.3 m/s, 0.5 m/s^2 (the accel used in the support-polygon check).
+           Angular: 1.0 rad/s, 1.5 rad/s^2. -->
+      <max_linear_acceleration>0.5</max_linear_acceleration>
+      <min_linear_acceleration>-0.5</min_linear_acceleration>
+      <max_angular_acceleration>1.5</max_angular_acceleration>
+      <min_angular_acceleration>-1.5</min_angular_acceleration>
+      <max_linear_velocity>0.3</max_linear_velocity>
+      <min_linear_velocity>-0.3</min_linear_velocity>
+      <max_angular_velocity>1.0</max_angular_velocity>
+      <min_angular_velocity>-1.0</min_angular_velocity>
       <topic>cmd_vel</topic>
       <odom_topic>odom</odom_topic>
-      <tf_topic>tf</tf_topic>
+      <!-- Unique name so the launch package can bridge this as a wheel-odometry guess
+           without colliding with /tf. Relative name: ign-gazebo6 assigns it as-is
+           (not under /model/<name>/); gz-transport then publishes the absolute /wheel_tf.
+           odom is likewise published as /odom. frame_id / child_frame_id unchanged. -->
+      <tf_topic>wheel_tf</tf_topic>
       <frame_id>odom</frame_id>
       <child_frame_id>base_footprint</child_frame_id>
       <odom_publish_frequency>30</odom_publish_frequency>

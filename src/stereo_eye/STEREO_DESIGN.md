@@ -48,7 +48,9 @@ what they may need.
 base_footprint                                   (ground, under the axle centre; RTAB-Map frame_id)
 └── base_link                                    (axle height, z = 0.065)
     ├── left_wheel_link / right_wheel_link       (continuous; DiffDrive)
-    ├── caster_link                              (rear ball)
+    ├── caster_link                              (rear ball, μ = 0.01)
+    ├── front_caster_link                        (front ball / skid, μ = 0.01)
+    ├── ballast_link                             (2.40 kg battery on the torso floor)
     ├── imu_link                                 (z = +0.01 on the axle line)
     └── head_link                                (z = +0.1925)
         └── stereo_bar_link                      (fixed, x = +0.061, z = +0.005: RIGID STEREO BAR, lens front plane)
@@ -58,7 +60,7 @@ base_footprint                                   (ground, under the axle centre;
             └── camera_right_link                (y = -0.040, x forward; gz sensor "stereo_right")
                 └── camera_right_optical_frame   (rpy -pi/2 0 -pi/2)
 ```
-At runtime, `odom → base_footprint` comes from the DiffDrive plugin (bridged `/tf`), and `map → odom` comes from RTAB-Map.
+At runtime, DiffDrive publishes `odom → base_footprint` on the gz topics `/odom` and `/wheel_tf` (see section 4). Who actually parents `base_footprint` in the ROS TF tree is a launch-package choice: wheel odometry, stereo odometry, or a filter. `map → odom` comes from RTAB-Map.
 
 * **The bar is the only parent of both cameras.** There is one rigid body and no joint between the cameras, so the
   relative pose (the stereo extrinsics) is fixed by construction. The bar carries the 0.06 kg camera mass (box
@@ -66,7 +68,7 @@ At runtime, `odom → base_footprint` comes from the DiffDrive plugin (bridged `
 * **Lens front height:** both optical centres are **0.2625 m above the ground** and 0.061 m ahead of the axle, level (0° pitch).
 * **Validated optical frame axes:** in `base_footprint`, x = (0, −1, 0) (right), y = (0, 0, −1) (down), z = (1, 0, 0) (forward).
   The right camera sits at **(+0.080, 0, 0)** in the left optical frame. That's the standard ROS stereo layout: right camera at +x of the left camera.
-* **Unchanged:** `base_footprint` / `base_link`, wheels, DiffDrive, caster, IMU, masses (3.16 kg total) and the other links.
+* **Also in the tree (tip-proof update):** a front caster, a low 2.40 kg `ballast_link`, a light 0.80 kg torso shell and a 0.20 kg head. Total mass is **4.060 kg**, COM **(−0.0180, 0, 0.0782) m** in `base_footprint`. See the robot README for the support-polygon and braking-tilt numbers.
   The old `head_link → camera_link → camera_*` chain became `head_link → stereo_bar_link → {camera_link, camera_left_link, camera_right_link}`.
 
 ## 3. Camera specification
@@ -115,8 +117,8 @@ regularly sees obstacles at 0.4-1 m (furniture, door frames, corridor walls) and
 **FPS rationale (24 Hz).** The cameras are now 640×360, one quarter of the pixels of the original 1280×720, as a
 deliberate trade for sim performance (below the original ≥ 720p requirement; set `cam_w=1280`, `cam_h=720` to restore).
 The GPU in the devcontainer now works (D3D12 on an AMD 780M), so the earlier 15 Hz / 1280×720 limit (WSLg, little GPU
-access) no longer applies. At 24 Hz and the DiffDrive limits (0.6 m/s, 2 rad/s), the robot moves at most 2.5 cm and
-turns at most 4.8° between frames — tighter than the old 4 cm / 7.6° at 15 Hz, and well inside what stereo odometry and
+access) no longer applies. At 24 Hz and the DiffDrive limits (0.3 m/s, 1.0 rad/s), the robot moves at most 1.25 cm and
+turns at most 2.4° between frames — tighter than the previous 2.5 cm / 4.8° at 0.6 m/s and 2 rad/s, and well inside what stereo odometry and
 feature matching handle with an 86° HFOV. RTAB-Map's SLAM loop runs at 1 Hz (`Rtabmap/DetectionRate`). Raise `cam_fps`
 to 30, or restore 1280×720, if the machine keeps a real-time factor near 1.0.
 
@@ -134,9 +136,9 @@ Classic's single `multicamera` sensor. Exact sync can be used (`approx_sync:=fal
 | `/stereo/right/image_raw` | sensor_msgs/Image | `camera_right_optical_frame` |
 | `/stereo/right/camera_info` | sensor_msgs/CameraInfo (P[3] = −27.48) | `camera_right_optical_frame` |
 | `/imu` | sensor_msgs/Imu, 100 Hz | `imu_link` |
-| `/odom`, `/tf` (odom → base_footprint), `/joint_states` | DiffDrive / JointStatePublisher | |
+| `/odom`, `/wheel_tf` (odom → base_footprint), `/joint_states` | DiffDrive / JointStatePublisher. Absolute gz names: `/odom` and `/wheel_tf` (the plugin uses the relative names `odom` and `wheel_tf`; ign-gazebo6 does not scope them under `/model/stereo_eye/`). `frame_id` is `odom`, `child_frame_id` is `base_footprint`. `/wheel_tf` is the unique wheel-odometry TF guess for the launch package to bridge; it does not collide with `/tf`. |
 
-These are the same names the launcher already bridges, so no topic renames are needed.
+The camera, IMU, `/odom`, `/joint_states` and `/cmd_vel` names are unchanged. `/wheel_tf` is new (it replaces the plugin's previous `tf` topic) so the launch package can bridge a wheel-odometry guess without colliding with `/tf`.
 
 **`image_rect`.** RTAB-Map's stereo inputs are named `left/image_rect`, `right/image_rect`, `left/camera_info` and `right/camera_info`.
 The sim images have no distortion (R = identity, P = K plus Tx), so they are already rectified. **Remap `image_raw` to
@@ -182,7 +184,7 @@ The repo's model already has `imu_link` (100 Hz, gyro σ 0.0009 rad/s, accel σ 
 the launcher already bridges `/imu`. It's kept as is.
 
 * **Wheel odometry mode (recommended for this robot):** fuse `/odom` + `/imu` with `robot_localization` (EKF; yaw rate from the
-  gyro) to cut yaw drift from wheel slip, especially with a frictionless caster. RTAB-Map then consumes the filtered odom.
+  gyro) to cut yaw drift from wheel slip, especially with the low-friction (μ = 0.01) casters. RTAB-Map then consumes the filtered odom.
 * **Visual odometry mode:** `rtabmap_odom/stereo_odometry` can take `/imu` (`subscribe_imu:=true`, `wait_imu_to_init:=true`) for a
   rotation prior during fast turns and low-texture moments. RTAB-Map can also add gravity constraints
   (`Optimizer/GravitySigma`, useful if `Reg/Force3DoF` is false).
@@ -213,11 +215,10 @@ driver's frames to `stereo_bar_link`), and feed RTAB-Map the driver's **rectifie
 
 **stereo_eye_launcher/launch/launch.py**
 * **Bridge:** the existing entries already match (`/stereo/{left,right}/image_raw`, `/stereo/{left,right}/camera_info`, `/imu`,
-  `/odom`, `/tf`, `/joint_states`, `/clock`, `/cmd_vel`). No change is needed. Optionally, move the image topics to `ros_gz_image image_bridge` for
+  `/odom`, `/wheel_tf`, `/joint_states`, `/clock`, `/cmd_vel`). Bridge `/wheel_tf` (gz `Pose_V`) if you want the DiffDrive wheel-odometry TF as a guess for stereo odometry; do not also let a second source parent `base_footprint`. Optionally, move the image topics to `ros_gz_image image_bridge` for
   lower overhead, and check sensor QoS (best effort) on subscribers.
 * **Wording / version:** "Harmonic" in the comments vs Fortress in the container (section 1).
-* **Odom TF conflict:** if stereo visual odometry is used, stop bridging the DiffDrive `/tf` (or set `publish_tf:=false` on
-  `stereo_odometry`), so `base_footprint` has only one parent.
+* **Odom TF conflict:** if stereo visual odometry publishes `odom → base_footprint`, do not also use the DiffDrive `/wheel_tf` as a live TF parent (or set `publish_tf:=false` on `stereo_odometry`). `base_footprint` must have only one parent. `/wheel_tf` is still useful as a *guess* input to stereo odometry.
 * **Add RTAB-Map** (a new node block or a separate launch). Key parameters:
   ```python
   rtabmap_params = {
@@ -258,9 +259,9 @@ driver's frames to `stereo_bar_link`), and feed RTAB-Map the driver's **rectifie
 ## 9. Validation (this change)
 
 * `xacro stereo_eye.urdf.xacro` (with and without `use_gazebo:=false`) expands without errors. `stereo_eye.urdf` was regenerated.
-* `urdf_parser_py` check: single tree rooted at `base_footprint`. **13 links / 12 joints** (2 continuous wheel joints).
+* `urdf_parser_py` check: single tree rooted at `base_footprint`. **15 links / 14 joints** (2 continuous wheel joints).
   `camera_left_link` and `camera_right_link` both have parent `stereo_bar_link`.
-* Total mass 3.160 kg, COM (−0.0212, 0, 0.0963) m. All inertia tensors are positive and satisfy the triangle inequality.
+* Total mass 4.060 kg, COM (−0.0180, 0, 0.0782) m (was 3.160 kg, (−0.0212, 0, 0.0963) m). All inertia tensors are positive and satisfy the triangle inequality. Forward braking margin at 0.5 m/s² is 8.91 cm (was 1.63 cm with a rear-only caster).
 * Optical frames: z forward, x right, y down. The right camera is at (+0.080, 0, 0) in the left optical frame.
   TF baseline 0.080 m = −Tx/fx.
 * Both camera sensors have identical intrinsics, rate and resolution: 640×360, 24 Hz, HFOV 1.5, fx = fy = 343.50, cx = 320, cy = 180.
