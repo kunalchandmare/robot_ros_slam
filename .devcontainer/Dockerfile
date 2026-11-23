@@ -47,11 +47,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-rqt-robot-steering \
     && rm -rf /var/lib/apt/lists/*
 
+# Navigation (Nav2) for autonomous frontier exploration (launch with explore:=true).
+# Its own step, so the big step above stays cached.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-navigation2 \
+    ros-humble-nav2-bringup \
+    && rm -rf /var/lib/apt/lists/*
+
+# explore_lite (frontier exploration) has no apt package for Humble, so build it
+# from source into its own small workspace /opt/explore_ws, pinned to a known commit.
+# Only explore_lite and its message package are built (map_merge is skipped).
+ARG M_EXPLORE_COMMIT=326cf8a0b487c34246bb8f3326afbcd69576dc60
+RUN mkdir -p /opt/explore_ws/src && cd /opt/explore_ws/src \
+    && git clone https://github.com/robo-friends/m-explore-ros2.git \
+    && cd m-explore-ros2 && git checkout ${M_EXPLORE_COMMIT} \
+    && cd /opt/explore_ws \
+    && . /opt/ros/humble/setup.sh \
+    && colcon build --packages-up-to explore_lite --cmake-args -DCMAKE_BUILD_TYPE=Release \
+    && rm -rf build log
+
 # Initialize rosdep (optional but recommended)
 RUN rosdep update
 
 # Auto-source ROS and workspace
+# Order matters: ROS, then explore_lite, then our workspace on top.
 RUN echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc && \
+    echo 'source /opt/explore_ws/install/setup.bash' >> /root/.bashrc && \
     echo 'source /workspaces/ros2-dev/install/setup.bash' >> /root/.bashrc
 
 WORKDIR /workspaces/ros2-dev
