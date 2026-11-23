@@ -74,16 +74,19 @@ no collisions, so walls, doorways and the spawn point haven't moved.
 
 The textures are small PNG images (about 1.2 MB in total) in
 `models/apartment_walls/materials/textures/`. They're used through
-`<pbr><metal><albedo_map>`, which the ogre2 renderer in Gazebo Sim reads.
+`<pbr><metal><albedo_map>`, which Gazebo Sim's renderers read.
 Gazebo Classic ignores them and shows plain colours instead.
 
 ### Simulation systems (sensors)
 
 The world loads these Gazebo Sim systems: Physics, UserCommands,
-SceneBroadcaster, **Sensors** (ogre2 renderer) and **Imu**. Without the
+SceneBroadcaster, **Sensors** (Ogre 1 renderer, `ogre`) and **Imu**. Without the
 last two, robot cameras and IMUs don't publish anything. The plugin names
 are the Fortress (`ignition-gazebo-*`) names that ship with ROS 2 Humble.
-Garden and Harmonic still accept them, with a deprecation warning. Gazebo
+Garden and Harmonic still accept them, with a deprecation warning.
+The sensors and the GUI's 3D view use Ogre 1 because Ogre 2 crashes when the
+cameras start on WSL with the d3d12 GPU driver. On a native Linux GPU you can
+switch both back to `ogre2`. Gazebo
 Classic can't load these plugins, logs errors for them and skips them.
 
 ### Robot spawn

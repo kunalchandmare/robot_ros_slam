@@ -2,15 +2,19 @@
 <sdf version="1.7">
   <world name="apartment">
     <!-- gz sim system plugins. Declaring any world plugin disables Gazebo's default set,
-         so Physics, UserCommands and SceneBroadcaster are listed explicitly. Sensors (ogre2)
+         so Physics, UserCommands and SceneBroadcaster are listed explicitly. Sensors (ogre)
          renders the stereo cameras; Imu makes the IMU publish. Fortress (ign-gazebo 6) names;
          on Garden/Harmonic the equivalents are gz-sim-*-system / gz::sim::systems::*.
          (STEREO_DESIGN.md section 8.) -->
     <plugin filename="ignition-gazebo-physics-system" name="ignition::gazebo::systems::Physics"/>
     <plugin filename="ignition-gazebo-user-commands-system" name="ignition::gazebo::systems::UserCommands"/>
     <plugin filename="ignition-gazebo-scene-broadcaster-system" name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <!-- Sensors use Ogre 1 ("ogre"), not Ogre 2. On WSL with the d3d12 GPU driver,
+         Ogre 2 crashes Gazebo when the cameras start (GL3PlusTextureGpu::copyTo
+         is not implemented there), while Ogre 1 works. The launcher defaults to
+         --render-engine ogre to match. On a native Linux GPU, ogre2 also works. -->
     <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
-      <render_engine>ogre2</render_engine>
+      <render_engine>ogre</render_engine>
     </plugin>
     <plugin filename="ignition-gazebo-imu-system" name="ignition::gazebo::systems::Imu"/>
     <gravity>0 0 -9.81</gravity>
@@ -46,7 +50,8 @@
           <property type="bool" key="showTitleBar">false</property>
           <property type="string" key="state">docked</property>
         </ignition-gui>
-        <engine>ogre2</engine>
+        <!-- Ogre 1 here too, same WSL d3d12 reason as the Sensors system above. -->
+        <engine>ogre</engine>
         <scene>scene</scene>
         <ambient_light>0.5 0.5 0.5</ambient_light>
         <background_color>0.7 0.75 0.8</background_color>
