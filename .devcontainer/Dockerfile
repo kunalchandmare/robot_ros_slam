@@ -35,6 +35,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon-x11-0 \
     libgl1-mesa-glx \
     libgl1-mesa-dri \
+    # GPU check tool: glxinfo -B shows which renderer OpenGL uses
+    mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Initialize rosdep (optional but recommended)
