@@ -1,0 +1,30 @@
+# explore_params.yaml - explore_lite (m-explore-ros2) settings for stereo_eye.
+#
+# Loaded by launch.py when explore:=true. The node is named explore_node
+# (the name explore_lite gives itself). It finds frontiers (edges between
+# known free space and unknown space) and sends the best one to Nav2's
+# navigate_to_pose action, again and again, until none are left. It then
+# publishes "exploration_complete" on /explore/status (transient local),
+# which explore_map_saver.py listens to.
+
+explore_node:
+  ros__parameters:
+    use_sim_time: True
+    robot_base_frame: base_footprint
+    # Frontiers are searched on Nav2's global costmap, which is rtabmap's /map
+    # plus inflation. It is used instead of /map directly because rtabmap only
+    # republishes a latched /map when the map changes, and explore_lite
+    # subscribes without "transient local", so it could wait forever for a
+    # first map while the robot stands still. The global costmap is
+    # republished every second (always_send_full_costmap in nav2_params.yaml).
+    costmap_topic: /global_costmap/costmap
+    costmap_updates_topic: /global_costmap/costmap_updates
+    visualize: true              # frontier markers on /explore/frontiers for RViz
+    planner_frequency: 0.2       # (Hz) pick a new frontier every 5 s
+    progress_timeout: 60.0       # (s) give up on (blacklist) a frontier after 60 s without progress
+    potential_scale: 3.0         # weight of distance to a frontier (prefer near ones)
+    orientation_scale: 0.0       # weight of heading change (unused upstream)
+    gain_scale: 1.0              # weight of frontier size (prefer big ones)
+    transform_tolerance: 0.5     # (s) visual odometry TF can lag a little
+    min_frontier_size: 0.5       # (m) ignore smaller frontiers (stereo-depth holes)
+    return_to_init: false        # true = drive back to the start pose when done
