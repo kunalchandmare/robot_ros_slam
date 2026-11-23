@@ -99,9 +99,9 @@ crashes on the WSL D3D12 GPU driver with an Ogre `UnimplementedException` in
 
 7. **Bridges topics** between Gazebo and ROS with `ros_gz_bridge parameter_bridge`.
    `[` means Gazebo to ROS, `]` means ROS to Gazebo. Every node is launched with
-   `use_sim_time` true. DiffDrive `/tf` is **not** bridged (see TF ownership below).
-   DiffDrive `/odom` is remapped to `/wheel_odom` so it does not collide with
-   stereo visual odometry:
+   `use_sim_time` true. DiffDrive's TF (gz topic `/wheel_tf`) is bridged onto
+   ROS `/tf` (see TF ownership below). DiffDrive `/odom` is remapped to
+   `/wheel_odom` so it does not collide with stereo visual odometry:
 
    | ROS topic                    | Type                        | Direction     |
    |------------------------------|-----------------------------|---------------|
@@ -112,6 +112,7 @@ crashes on the WSL D3D12 GPU driver with an Ogre `UnimplementedException` in
    | `/stereo/right/camera_info`  | `sensor_msgs/CameraInfo`    | Gazebo to ROS |
    | `/imu`                       | `sensor_msgs/Imu`           | Gazebo to ROS |
    | `/wheel_odom`                | `nav_msgs/Odometry`         | Gazebo to ROS (DiffDrive `/odom`) |
+   | `/tf`                        | `tf2_msgs/TFMessage`        | Gazebo to ROS (DiffDrive `/wheel_tf`) |
    | `/joint_states`              | `sensor_msgs/JointState`    | Gazebo to ROS |
    | `/cmd_vel`                   | `geometry_msgs/Twist`       | ROS to Gazebo |
 
@@ -126,18 +127,36 @@ crashes on the WSL D3D12 GPU driver with an Ogre `UnimplementedException` in
    sim slows down and the left, right and `/odom` stamps stop matching exactly,
    so exact sync dropped nearly every frame. Queues are `sync_queue_size` 20
    (the synchronizer) and `topic_queue_size` 10 (each subscriber). rtabmap
-   builds its occupancy grid from stereo depth (`Grid/Sensor` 1). rtabmap takes `/odom` from stereo_odometry (plus `odom_info`) and
-   waits up to 0.2 s for TF.
+   builds its occupancy grid from stereo depth (`Grid/Sensor` 1). rtabmap
+   takes `/odom` from stereo_odometry (plus `odom_info`) and waits up to 0.2 s
+   for TF.
+
+   stereo_odometry uses the wheel odometry as its starting guess
+   (`guess_frame_id` `odom`) and publishes in its own frame `vo`
+   (`odom_frame_id` `vo`). It resets itself right after it gets lost
+   (`Odom/ResetCountdown` 1). Its visual tuning is modest and explained in the
+   comments in `launch.py`: Frame-to-Map strategy (`Odom/Strategy` 0), GFTT/ORB
+   features (`Vis/FeatureType` 8), up to 1000 features (`Vis/MaxFeatures`),
+   `GFTT/MinDistance` 5 and `Odom/KeyFrameThr` 0.4.
 
 9. **camera_brightness** is remapped from `/image` to `/stereo/left/image_raw`.
 
 ## TF ownership
 
-Only one source may publish `odom` → `base_footprint`. This launch gives that
-transform to **stereo_odometry** (`publish_tf` true) and lets **rtabmap** publish
-`map` → `odom`. DiffDrive still publishes wheel odometry on Gazebo `/odom`, but
-the bridge remaps it to `/wheel_odom` and does not bridge `/tf`.
-`robot_state_publisher` remains the source of `base_footprint` → camera frames.
+Every frame may have only one parent, so each link above the robot has exactly
+one owner:
+
+- **DiffDrive** (Gazebo wheel odometry) publishes `odom` → `base_footprint`. Its gz
+  TF topic `/wheel_tf` is bridged onto ROS `/tf`. Its odometry message is on
+  `/wheel_odom`.
+- **stereo_odometry** publishes `vo` → `odom`, the visual correction on top of the
+  wheels (`odom_frame_id` `vo`, `guess_frame_id` `odom`).
+- **rtabmap** publishes `map` → `vo`.
+- **robot_state_publisher** publishes `base_footprint` → the rest of the robot.
+
+The DiffDrive TF needs MechaX's `tf_topic` `wheel_tf` in `stereo_eye.gazebo.xacro`.
+If the xacro still says `tf`, nothing arrives on `/wheel_tf`, stereo_odometry
+cannot find `odom` → `base_footprint`, and odometry will not start.
 
 ## Frames and the TF tree
 
@@ -198,8 +217,9 @@ This is the tree for this robot. Offsets are checked against
 
 ```mermaid
 graph TD
-  map -->|"rtabmap: drift correction (/tf)"| odom
-  odom -->|"stereo_odometry: distance driven (/tf)"| base_footprint
+  map -->|"rtabmap: loop-closure correction (/tf)"| vo
+  vo -->|"stereo_odometry: visual correction (/tf)"| odom
+  odom -->|"DiffDrive wheels: distance driven (/wheel_tf to /tf)"| base_footprint
   base_footprint -->|"fixed: up 6.5 cm"| base_link
   base_link -->|"wheel angle, left 9.5 cm (/tf)"| left_wheel_link
   base_link -->|"wheel angle, right 9.5 cm (/tf)"| right_wheel_link
@@ -229,13 +249,29 @@ Some notes on the tree:
 |---|---|---|---|
 | All fixed links (`base_footprint` → `base_link` → head, bar, cameras, IMU, caster) | `robot_state_publisher` | `/tf_static` | Reads the URDF that `xacro` builds from `stereo_eye.urdf.xacro` |
 | `base_link` → `left_wheel_link`, `right_wheel_link` | `robot_state_publisher` | `/tf` | Uses the wheel angles in `/joint_states`, bridged from Gazebo |
-| `odom` → `base_footprint` | `stereo_odometry` (rtabmap_odom) | `/tf` | Estimates how far the robot has moved from the camera images |
-| `map` → `odom` | `rtabmap` (rtabmap_slam) | `/tf` | Drift correction: shifts `odom` when a loop closure shows it has drifted |
+| `odom` → `base_footprint` | DiffDrive in Gazebo | `/wheel_tf` bridged to `/tf` | Counts wheel turns to estimate how far the robot drove |
+| `vo` → `odom` | `stereo_odometry` (rtabmap_odom) | `/tf` | Corrects the wheel estimate using the camera images |
+| `map` → `vo` | `rtabmap` (rtabmap_slam) | `/tf` | Drift correction: shifts `vo` when a loop closure shows it has drifted |
 
-Why two layers above the robot? `odom` is smooth but slowly drifts, because small
-errors add up. `map` is globally correct but can jump when rtabmap recognises a
-place it has seen before. Keeping them as separate links lets each node own one
-transform, so they never fight. See also [TF ownership](#tf-ownership).
+**Why are there two odometries?** Both estimate how far the robot has moved,
+but they fail in different ways:
+
+- **Wheel odometry** (`odom`) counts wheel turns. It is smooth, never "gets
+  lost" and works in the dark, but small errors (slip, wheel size) add up,
+  especially when turning.
+- **Visual odometry** (`vo`) tracks features between camera frames. It does not
+  drift as fast, but it can get lost in front of a plain wall or during a fast
+  turn.
+
+So the wheels give stereo_odometry a starting guess for every frame, and
+stereo_odometry only publishes the small visual correction on top. If vision
+gets lost, the wheels keep `odom` → `base_footprint` moving, and the
+auto-reset brings vision back.
+
+Why another layer on top? `vo` is smooth but still slowly drifts. `map` is
+globally correct but can jump when rtabmap recognises a place it has seen
+before. Keeping them as separate links lets each node own one transform, so
+they never fight. See also [TF ownership](#tf-ownership).
 
 **Everything uses sim time.** Every node in this launch runs with
 `use_sim_time: true`, so timestamps come from Gazebo's `/clock`, not the wall
@@ -326,7 +362,7 @@ With the simulation running (in another terminal, after sourcing
 Do **not** run a bare `rviz2`. A plain RViz session uses wall time, while every
 TF, image, map, and odometry message here is stamped in sim time (`/clock`).
 Its default Fixed Frame is also `map`, which does not exist until `rtabmap`
-publishes the `map` → `odom` transform, so the view stays empty.
+publishes the `map` → `vo` transform, so the view stays empty.
 
 RViz starts automatically with this launch file, using
 `rviz/stereo_slam.rviz` and `use_sim_time:=true`. Disable it with
@@ -342,18 +378,18 @@ If you start it manually, load the config and enable sim time:
 rviz2 -d $(ros2 pkg prefix stereo_eye_launcher)/share/stereo_eye_launcher/rviz/stereo_slam.rviz --ros-args -p use_sim_time:=true
 ```
 
-The config uses Fixed Frame `odom` (available as soon as stereo odometry
-publishes TF) and these displays:
+The config uses Fixed Frame `odom` (wheel odometry, available as soon as the
+simulation runs) and these displays:
 
 | Display     | Topic                      | Notes |
 |-------------|----------------------------|-------|
-| TF          | —                          | Full tree: `odom` → `base_footprint` → cameras; `map` → `odom` once SLAM starts |
+| TF          | —                          | Full tree: `odom` → `base_footprint` → cameras; `map` → `vo` → `odom` once SLAM starts |
 | RobotModel  | `/robot_description`       | Description Source is Topic, durability Transient Local (matches `robot_state_publisher`) |
 | Image       | `/stereo/left/image_raw`   | Reliability Best Effort |
 | Image       | `/stereo/right/image_raw`  | Reliability Best Effort |
 | Map         | `/map`                     | OccupancyGrid from `rtabmap`; durability Transient Local |
 | PointCloud2 | `/cloud_map`               | Assembled 3D map from `rtabmap` |
-| Odometry    | `/odom`                    | Stereo visual odometry (not `/wheel_odom`) |
+| Odometry    | `/odom`                    | Stereo visual odometry in frame `vo` (not `/wheel_odom`) |
 
 `/map` and `/cloud_map` are used (not `/rtabmap/map` or `/rtabmap/cloud_map`)
 because `launch.py` starts the `rtabmap` node with no namespace and no remaps
@@ -411,7 +447,9 @@ or attach it when asking for help with debugging.
 ```bash
 ros2 topic list
 ros2 topic hz /stereo/left/image_raw
-ros2 topic hz /odom
+ros2 topic hz /odom          # visual odometry (frame vo)
+ros2 topic hz /wheel_odom    # wheel odometry from Gazebo
+ros2 run tf2_ros tf2_echo odom base_footprint   # wheels, needs /wheel_tf bridged
 ros2 topic echo --once /stereo/right/camera_info --field p   # expect P[3] = -27.48
 ros2 run tf2_ros tf2_echo map base_footprint
 ```

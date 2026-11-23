@@ -167,12 +167,16 @@ def generate_launch_description():
     # gz.msgs.* (and ignition.msgs.*) type strings on Fortress and Harmonic.
     # '[' = Gazebo -> ROS, ']' = ROS -> Gazebo.
     #
-    # TF ownership: stereo_odometry publishes odom -> base_footprint, so the
-    # DiffDrive /tf is intentionally not bridged (a second parent would break
-    # the tree). The DiffDrive /odom topic is remapped to /wheel_odom so it
-    # does not collide with stereo_odometry's /odom. robot_state_publisher
-    # still provides base_footprint -> camera_* frames (and the rest of the
-    # model) from the URDF plus bridged /joint_states.
+    # TF ownership (tree: map -> vo -> odom -> base_footprint):
+    #   - DiffDrive (wheels) publishes odom -> base_footprint on the gz topic
+    #     /wheel_tf, bridged here onto ROS /tf. It is the only parent of
+    #     base_footprint.
+    #   - stereo_odometry publishes vo -> odom (visual correction on top of
+    #     the wheels), rtabmap publishes map -> vo.
+    #   - robot_state_publisher provides base_footprint -> camera_* frames
+    #     (and the rest of the model) from the URDF plus bridged /joint_states.
+    # The DiffDrive /odom topic is remapped to /wheel_odom so it does not
+    # collide with stereo_odometry's /odom.
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -186,11 +190,13 @@ def generate_launch_description():
             '/stereo/right/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
             '/imu@sensor_msgs/msg/Imu[gz.msgs.IMU',
             '/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry',
+            '/wheel_tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V',
             '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
             '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
         ],
         remappings=[
             ('/odom', '/wheel_odom'),
+            ('/wheel_tf', '/tf'),
         ],
         parameters=[{'use_sim_time': use_sim_time}],
     )
@@ -229,12 +235,33 @@ def generate_launch_description():
         'Stereo/MaxDisparity': '160',
     }
 
-    # Odom/ResetCountdown 1: when visual odometry gets lost ("Not enough
-    # inliers", quality 0), reset it on the very next frame instead of staying
-    # lost forever. Without it, rtabmap keeps printing "no odometry is
+    # Wheel odometry as a guess: guess_frame_id 'odom' makes stereo_odometry
+    # read the wheel motion (odom -> base_footprint from DiffDrive, via TF) as
+    # its starting guess for every frame. It then publishes only the visual
+    # correction, vo -> odom, instead of a second parent for base_footprint.
+    # With a good guess the feature matcher searches a smaller area and is
+    # much less likely to get lost on turns or plain walls.
+    #
+    # Odom/ResetCountdown 1: when visual odometry still gets lost ("Not
+    # enough inliers", quality 0), reset it on the very next frame instead of
+    # staying lost forever. Without it, rtabmap keeps printing "no odometry is
     # provided, image ignored" and the map freezes. After a reset, rtabmap
     # starts a new map session and links it to the old one through loop
     # closure once the robot sees a known place again.
+    #
+    # Modest visual odometry tuning (rtabmap parameters are strings):
+    #   Odom/Strategy 0     Frame-to-Map (F2M): match each frame against a
+    #                       small local map of recent features, not only the
+    #                       last frame. This is the default, set explicitly.
+    #   Vis/FeatureType 8   GFTT corners with ORB descriptors (the default).
+    #                       GFTT finds corners even on low-texture surfaces.
+    #   Vis/MaxFeatures     Up to 1000 features per frame, so there are more
+    #                       candidates to match on plain walls.
+    #   GFTT/MinDistance 5  Allow corners 5 px apart (default 7), which suits
+    #                       the 640x360 images.
+    #   Odom/KeyFrameThr    Add a new keyframe to the local map when inliers
+    #                       drop below 40 % (default 30 %), so the map refreshes
+    #                       a little earlier during turns.
     stereo_odometry = Node(
         package='rtabmap_odom',
         executable='stereo_odometry',
@@ -242,16 +269,22 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             **stereo_common_params,
-            'odom_frame_id': 'odom',
+            'odom_frame_id': 'vo',
+            'guess_frame_id': 'odom',
             'publish_tf': True,
             'Odom/ResetCountdown': '1',
+            'Odom/Strategy': '0',
+            'Vis/FeatureType': '8',
+            'Vis/MaxFeatures': '1000',
+            'GFTT/MinDistance': '5',
+            'Odom/KeyFrameThr': '0.4',
         }],
         remappings=stereo_remaps,
     )
 
     # odom_frame_id is left unset so rtabmap subscribes to the /odom topic
     # from stereo_odometry (setting it would read TF only and drop the topic).
-    # rtabmap itself publishes only map -> odom.
+    # That topic's frame is vo, so rtabmap publishes only map -> vo.
     rtabmap = Node(
         package='rtabmap_slam',
         executable='rtabmap',
@@ -287,7 +320,7 @@ def generate_launch_description():
         remappings=[('/image', '/stereo/left/image_raw')],
     )
 
-    # Fixed Frame is odom (exists as soon as stereo_odometry publishes TF).
+    # Fixed Frame is odom (exists as soon as the wheel TF is bridged).
     # use_sim_time must be true so Image/TF/Map stamps match /clock. A bare
     # rviz2 uses wall time and defaults Fixed Frame to map, which is empty
     # until rtabmap publishes map -> odom.

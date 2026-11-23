@@ -1,6 +1,7 @@
 # stereo_slam.rviz - RViz2 config for stereo_eye RTAB-Map SLAM in Gazebo.
-# Loaded by launch.py with use_sim_time:=true. Fixed Frame is odom, which
-# exists as soon as stereo_odometry runs (map only appears once rtabmap does).
+# Loaded by launch.py with use_sim_time:=true. Fixed Frame is odom (wheel
+# odometry from Gazebo), which exists as soon as the simulation runs; map
+# only appears once rtabmap does.
 # Hand-maintained: only non-default settings are listed; RViz fills in the rest.
 # Note: "File > Save Config" in RViz rewrites this file with generated window
 # state - don't commit that; edit this file by hand instead.
@@ -27,7 +28,7 @@ Visualization Manager:
       Cell Size: 1
       Plane Cell Count: 10
 
-    # TF frame tree (map > odom > base_footprint > camera frames)
+    # TF frame tree (map > vo > odom > base_footprint > camera frames)
     - Class: rviz_default_plugins/TF
       Name: TF
       Enabled: true
