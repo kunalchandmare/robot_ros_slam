@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!--
   Stereo Eye - a cute 2-wheel differential-drive mapping robot.
-  One "eye" that is a calibrated 2-camera stereo pair (80 mm baseline, 1280x720 per eye @ 15 fps,
+  One "eye" that is a calibrated 2-camera stereo pair (80 mm baseline, 640x360 per eye @ 24 fps,
   identical intrinsics) on a rigid stereo bar, for RTAB-Map stereo SLAM and navigation.
   See ../STEREO_DESIGN.md for the camera design rationale.
 
@@ -64,9 +64,9 @@
 
   <!-- Stereo camera pair (identical intrinsics for both eyes) -->
   <xacro:property name="stereo_baseline" value="0.080"/> <!-- m; 6-12 cm range, see STEREO_DESIGN.md -->
-  <xacro:property name="cam_w"    value="1280"/>          <!-- >= 720p per eye -->
-  <xacro:property name="cam_h"    value="720"/>
-  <xacro:property name="cam_fps"  value="15"/>            <!-- same rate for both eyes -> same sim stamps -->
+  <xacro:property name="cam_w"    value="640"/>           <!-- 640x360, below the original >=720p request: a deliberate trade for sim performance. Set cam_w=1280, cam_h=720 to restore. -->
+  <xacro:property name="cam_h"    value="360"/>
+  <xacro:property name="cam_fps"  value="24"/>            <!-- same rate for both eyes -> same sim stamps -->
   <xacro:property name="cam_hfov" value="1.5"/>           <!-- rad (~85.9 deg) -->
   <xacro:property name="cam_near" value="0.05"/>
   <xacro:property name="cam_far"  value="15.0"/>          <!-- apartment scale -->

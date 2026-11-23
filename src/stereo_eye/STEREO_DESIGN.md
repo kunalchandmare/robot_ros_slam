@@ -75,11 +75,11 @@ At runtime, `odom → base_footprint` comes from the DiffDrive plugin (bridged `
 |---|---|---|
 | Sensors | 2 × gz `camera` (`stereo_left`, `stereo_right`) | gz sim has no `multicamera` sensor. Sync is explained below |
 | Baseline B | **0.080 m** | Justification below |
-| Resolution | **1280 × 720 per eye** (R8G8B8 → `rgb8`) | Meets the ≥ 720p requirement |
-| Frame rate | **15 Hz**, both cameras | See the FPS rationale below |
+| Resolution | **640 × 360 per eye** (R8G8B8 → `rgb8`) | Below the original ≥ 720p requirement: a deliberate trade for sim performance. Set `cam_w=1280`, `cam_h=720` in the xacro to restore |
+| Frame rate | **24 Hz**, both cameras | See the FPS rationale below |
 | HFOV / VFOV | 1.5 rad (85.9°) / 0.965 rad (55.3°) | Wide enough for features and loop closures, but narrower than before to raise fx |
-| Intrinsics (both) | fx = fy = 640 / tan(0.75) = **686.99 px**, cx = 640, cy = 360, skew 0 | Identical K and P for left and right |
-| Projection Tx | left 0, right **−fx·B = −54.96** | `camera_info.P[3]` (section 5) |
+| Intrinsics (both) | fx = fy = 320 / tan(0.75) = **343.50 px**, cx = 320, cy = 180, skew 0 | Identical K and P for left and right |
+| Projection Tx | left 0, right **−fx·B = −27.48** | `camera_info.P[3]` (section 5) |
 | Distortion / rectification | none / R = identity | Sim images are ideal pinhole, i.e. **already rectified** |
 | Clip | 0.05 m to 15 m | The apartment is 10 × 8 m |
 | Noise | Gaussian σ = 0.005 (both) | |
@@ -87,29 +87,38 @@ At runtime, `odom → base_footprint` comes from the DiffDrive plugin (bridged `
 
 **Why an 80 mm baseline (allowed range 6-12 cm) for an indoor apartment.** Depth comes from disparity d = fx·B / Z.
 The depth error for a matching error δd ≈ 0.25 px is δZ = Z²·δd / (fx·B). The closest measurable depth for a disparity
-search of D px is Z_min = fx·B / D. With fx = 686.99:
+search of D px is Z_min = fx·B / D. Halving the resolution at the same FOV halves fx (now **343.50**, was 686.99 at 1280×720),
+so disparity at a given range is halved, depth error roughly doubles, and Z_min halves:
 
 | B | Z_min (D=128, RTAB-Map default) | Z_min (D=160) | δZ @ 1 m | δZ @ 3 m | δZ @ 5 m | disparity @ 5 m |
 |---|---|---|---|---|---|---|
-| 0.060 | 0.32 m | 0.26 m | 0.6 cm | 5.5 cm | 15.2 cm | 8.2 px |
-| 0.063 (old) | 0.34 m | 0.27 m | 0.6 cm | 5.2 cm | 14.4 cm | 8.7 px |
-| **0.080** | **0.43 m** | **0.34 m** | **0.5 cm** | **4.1 cm** | **11.4 cm** | **11.0 px** |
-| 0.100 | 0.54 m | 0.43 m | 0.4 cm | 3.3 cm | 9.1 cm | 13.7 px |
-| 0.120 | 0.64 m | 0.52 m | 0.3 cm | 2.7 cm | 7.6 cm | 16.5 px |
+| 0.060 | 0.16 m | 0.13 m | 1.2 cm | 10.9 cm | 30.3 cm | 4.1 px |
+| 0.063 (old) | 0.17 m | 0.14 m | 1.2 cm | 10.4 cm | 28.9 cm | 4.3 px |
+| **0.080** | **0.21 m** | **0.17 m** | **0.9 cm** | **8.2 cm** | **22.7 cm** | **5.5 px** |
+| 0.100 | 0.27 m | 0.21 m | 0.7 cm | 6.6 cm | 18.2 cm | 6.9 px |
+| 0.120 | 0.32 m | 0.26 m | 0.6 cm | 5.5 cm | 15.2 cm | 8.2 px |
 
 The rooms are at most about 5.8 m across (living room 5.77 × 4.27 m) and doorways are 0.9-1.6 m wide, so the robot
 regularly sees obstacles at 0.4-1 m (furniture, door frames, corridor walls) and walls at 3-5 m.
 
-* **80 mm cuts the far-range error by about 21% compared with 63 mm**: 11 cm instead of 14 cm at 5 m, with 11 px of disparity at the far wall.
-* **The near blind zone stays small:** 0.34 m with `Stereo/MaxDisparity=160`, 0.43 m with the default 128.
-* **A 10-12 cm baseline** would push Z_min to about 0.5-0.65 m. That's bad for 1 m doorways and close furniture. It would
-  also reduce left/right overlap near the robot and not fit the head (flat face ±0.075 m) inside a single eye.
+* **80 mm is still the right choice at 640×360.** It still cuts the far-range error by about 21% compared with 63 mm
+  (23 cm instead of 29 cm at 5 m; 5.5 px of disparity at the far wall instead of 4.3). The near blind zone is actually
+  *smaller* than at 1280×720: 0.17 m with `Stereo/MaxDisparity=160`, 0.21 m with the default 128.
+* **A 10-12 cm baseline is more attractive now than it was at 1280×720**, because Z_min would only be 0.27-0.32 m
+  (no longer the old 0.5-0.65 m problem) and far disparity would rise to 6.9-8.2 px. It still would not fit the head
+  (flat face ±0.075 m) inside a single eye, so it is not used.
+* **The cost of the lower resolution is coarser far depth:** 23 cm and only 5.5 px of disparity at 5 m (was 11 cm / 11 px).
+  Close range stays usable (0.9 cm at 1 m, 8.2 cm at 3 m). Restoring 1280×720 (set `cam_w`/`cam_h`) halves that error again
+  without changing the baseline.
 * **80 mm is between ZED Mini (63 mm) and OAK-D (75 mm) / ZED 2 (120 mm),** so a real camera with similar geometry exists.
 
-**FPS rationale (15 Hz).** Two 1280×720 render passes per step are the largest load in the sim, and the devcontainer runs
-under WSLg with limited GPU access. At 15 Hz and the DiffDrive limits (0.6 m/s, 2 rad/s), the robot moves at most 4 cm
-and turns at most 7.6° between frames. That's well inside what stereo odometry and feature matching handle with an 86° HFOV.
-RTAB-Map's SLAM loop runs at 1 Hz (`Rtabmap/DetectionRate`). Raise `cam_fps` to 30 if the machine keeps a real-time factor near 1.0.
+**FPS rationale (24 Hz).** The cameras are now 640×360, one quarter of the pixels of the original 1280×720, as a
+deliberate trade for sim performance (below the original ≥ 720p requirement; set `cam_w=1280`, `cam_h=720` to restore).
+The GPU in the devcontainer now works (D3D12 on an AMD 780M), so the earlier 15 Hz / 1280×720 limit (WSLg, little GPU
+access) no longer applies. At 24 Hz and the DiffDrive limits (0.6 m/s, 2 rad/s), the robot moves at most 2.5 cm and
+turns at most 4.8° between frames — tighter than the old 4 cm / 7.6° at 15 Hz, and well inside what stereo odometry and
+feature matching handle with an 86° HFOV. RTAB-Map's SLAM loop runs at 1 Hz (`Rtabmap/DetectionRate`). Raise `cam_fps`
+to 30, or restore 1280×720, if the machine keeps a real-time factor near 1.0.
 
 **Synchronisation.** Both sensors have the same `<update_rate>` and are rendered in the same simulation step by the
 `Sensors` system, so left and right images **carry identical header stamps (sim time)**. This is the gz sim equivalent of
@@ -120,10 +129,10 @@ Classic's single `multicamera` sensor. Exact sync can be used (`approx_sync:=fal
 
 | gz / ROS topic | Type | frame_id |
 |---|---|---|
-| `/stereo/left/image_raw` | sensor_msgs/Image (rgb8, 1280×720) | `camera_left_optical_frame` |
+| `/stereo/left/image_raw` | sensor_msgs/Image (rgb8, 640×360) | `camera_left_optical_frame` |
 | `/stereo/left/camera_info` | sensor_msgs/CameraInfo (P[3] = 0) | `camera_left_optical_frame` |
 | `/stereo/right/image_raw` | sensor_msgs/Image | `camera_right_optical_frame` |
-| `/stereo/right/camera_info` | sensor_msgs/CameraInfo (P[3] = −54.96) | `camera_right_optical_frame` |
+| `/stereo/right/camera_info` | sensor_msgs/CameraInfo (P[3] = −27.48) | `camera_right_optical_frame` |
 | `/imu` | sensor_msgs/Imu, 100 Hz | `imu_link` |
 | `/odom`, `/tf` (odom → base_footprint), `/joint_states` | DiffDrive / JointStatePublisher | |
 
@@ -152,12 +161,12 @@ The sim images have no distortion (R = identity, P = K plus Tx), so they are alr
      [link](https://github.com/gazebosim/gz-sensors/blob/ignition-sensors6_6.9.0/src/CameraSensor.cc#L722-L770); commit d090f91 "Camera: configure projection matrix from SDFormat (#249)")
      and on gz-sensors 8 (L774). **ign-sensors ≤ 6.6.0 ignores `<tx>`.** There, `PopulateInfo` writes `−fx · baseline` from the member set by
      path 1 (`// TODO(anyone) Get tx and ty from SDF`, L571/L578 @ 6.1.0, L645/L652 @ 6.6.0).
-     The xacro sets the right camera's `<tx>` = `−cam_fx·stereo_baseline` = **−54.96** (left 0), the same value path 1 computes, so
+     The xacro sets the right camera's `<tx>` = `−cam_fx·stereo_baseline` = **−27.48** (left 0), the same value path 1 computes, so
      the two paths agree on every version. Path 1 runs after `PopulateInfo` and has the last word.
   `ros_gz_bridge` copies P unchanged. Validated in the URDF: −Tx/fx = 0.0800 m = the TF baseline.
   (gz sim has no `hack_baseline`. It exists only in the Classic `libgazebo_ros_camera` plugin.)
 * **Launcher-side check (required once):** `ros2 topic echo --once /stereo/right/camera_info --field p` should show
-  `[686.99, 0, 640, -54.96, 0, 686.99, 360, 0, 0, 0, 1, 0]`. If it shows `p[3] = 0`, path 1 didn't trigger (e.g. the sensors
+  `[343.50, 0, 320, -27.48, 0, 343.50, 180, 0, 0, 0, 1, 0]`. If it shows `p[3] = 0`, path 1 didn't trigger (e.g. the sensors
   ended up on different links, or the topics lost `left`/`right`) and the build is ign-sensors ≤ 6.6. RTAB-Map then fails with an invalid stereo baseline. The fallbacks below are launcher-side:
   1. **A small camera_info relay** (about 20 lines of rclpy) that subscribes to `/stereo/right/camera_info`, sets `p[3] = -p[0]*0.080`,
      and republishes on `/stereo/right/camera_info_fixed`. Remap RTAB-Map's `right/camera_info` to it.
@@ -220,7 +229,7 @@ driver's frames to `stereo_bar_link`), and feed RTAB-Map the driver's **rectifie
       'odom_frame_id': '',             # use the /odom topic (wheel odom), or 'odom' to read TF
       'map_frame_id': 'map', 'publish_tf': True,
       'Reg/Force3DoF': 'true',         # planar robot
-      'Stereo/MaxDisparity': '160',    # min depth about 0.34 m with B = 0.08, fx = 687
+      'Stereo/MaxDisparity': '160',    # min depth about 0.17 m with B = 0.08, fx = 343.50
       'Grid/FromDepth': 'true',        # occupancy grid from stereo point cloud (for Nav2)
       'Grid/RangeMax': '4.0',
       'Grid/MaxGroundHeight': '0.05', 'Grid/MaxObstacleHeight': '0.40',   # robot is 0.34 m tall
@@ -254,8 +263,8 @@ driver's frames to `stereo_bar_link`), and feed RTAB-Map the driver's **rectifie
 * Total mass 3.160 kg, COM (−0.0212, 0, 0.0963) m. All inertia tensors are positive and satisfy the triangle inequality.
 * Optical frames: z forward, x right, y down. The right camera is at (+0.080, 0, 0) in the left optical frame.
   TF baseline 0.080 m = −Tx/fx.
-* Both camera sensors have identical intrinsics, rate and resolution: 1280×720, 15 Hz, HFOV 1.5, fx = fy = 686.99, cx = 640, cy = 360.
-  Left Tx = 0, right Tx = −54.96.
+* Both camera sensors have identical intrinsics, rate and resolution: 640×360, 24 Hz, HFOV 1.5, fx = fy = 343.50, cx = 320, cy = 180.
+  Left Tx = 0, right Tx = −27.48.
 * Both camera sensors and the IMU carry `<ignition_frame_id>` and `<gz_frame_id>` with the same frame (checked in the generated URDF).
 * No `<mesh>` / `package://` references (primitives only). `check_urdf` wasn't available in the validation environment.
 * **Not yet run in Gazebo.** The first sim run should confirm the `camera_info` P[3] value and the identical stamps (section 5).

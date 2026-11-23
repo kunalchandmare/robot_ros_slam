@@ -5,7 +5,7 @@
 <!-- =================================================================================== -->
 <!--
   Stereo Eye - a cute 2-wheel differential-drive mapping robot.
-  One "eye" that is a calibrated 2-camera stereo pair (80 mm baseline, 1280x720 per eye @ 15 fps,
+  One "eye" that is a calibrated 2-camera stereo pair (80 mm baseline, 640x360 per eye @ 24 fps,
   identical intrinsics) on a rigid stereo bar, for RTAB-Map stereo SLAM and navigation.
   See ../STEREO_DESIGN.md for the camera design rationale.
 
@@ -674,7 +674,7 @@
   <gazebo reference="camera_left_link">
     <sensor name="stereo_left" type="camera">
       <always_on>true</always_on>
-      <update_rate>15</update_rate>
+      <update_rate>24</update_rate>
       <visualize>false</visualize>
       <topic>stereo/left/image_raw</topic>
       <ignition_frame_id>camera_left_optical_frame</ignition_frame_id>
@@ -685,8 +685,8 @@
         <camera_info_topic>stereo/left/camera_info</camera_info_topic>
         <horizontal_fov>1.5</horizontal_fov>
         <image>
-          <width>1280</width>
-          <height>720</height>
+          <width>640</width>
+          <height>360</height>
           <format>R8G8B8</format>
         </image>
         <clip>
@@ -701,17 +701,17 @@
         <!-- No <distortion>: images are ideal pinhole, i.e. already rectified (R = identity). -->
         <lens>
           <intrinsics>
-            <fx>686.9927350716015</fx>
-            <fy>686.9927350716015</fy>
-            <cx>640.0</cx>
-            <cy>360.0</cy>
+            <fx>343.49636753580074</fx>
+            <fy>343.49636753580074</fy>
+            <cx>320.0</cx>
+            <cy>180.0</cy>
             <s>0</s>
           </intrinsics>
           <projection>
-            <p_fx>686.9927350716015</p_fx>
-            <p_fy>686.9927350716015</p_fy>
-            <p_cx>640.0</p_cx>
-            <p_cy>360.0</p_cy>
+            <p_fx>343.49636753580074</p_fx>
+            <p_fy>343.49636753580074</p_fy>
+            <p_cx>320.0</p_cx>
+            <p_cy>180.0</p_cy>
             <tx>0.0</tx>
             <ty>0</ty>
           </projection>
@@ -722,7 +722,7 @@
   <gazebo reference="camera_right_link">
     <sensor name="stereo_right" type="camera">
       <always_on>true</always_on>
-      <update_rate>15</update_rate>
+      <update_rate>24</update_rate>
       <visualize>false</visualize>
       <topic>stereo/right/image_raw</topic>
       <ignition_frame_id>camera_right_optical_frame</ignition_frame_id>
@@ -733,8 +733,8 @@
         <camera_info_topic>stereo/right/camera_info</camera_info_topic>
         <horizontal_fov>1.5</horizontal_fov>
         <image>
-          <width>1280</width>
-          <height>720</height>
+          <width>640</width>
+          <height>360</height>
           <format>R8G8B8</format>
         </image>
         <clip>
@@ -749,18 +749,18 @@
         <!-- No <distortion>: images are ideal pinhole, i.e. already rectified (R = identity). -->
         <lens>
           <intrinsics>
-            <fx>686.9927350716015</fx>
-            <fy>686.9927350716015</fy>
-            <cx>640.0</cx>
-            <cy>360.0</cy>
+            <fx>343.49636753580074</fx>
+            <fy>343.49636753580074</fy>
+            <cx>320.0</cx>
+            <cy>180.0</cy>
             <s>0</s>
           </intrinsics>
           <projection>
-            <p_fx>686.9927350716015</p_fx>
-            <p_fy>686.9927350716015</p_fy>
-            <p_cx>640.0</p_cx>
-            <p_cy>360.0</p_cy>
-            <tx>-54.95941880572812</tx>
+            <p_fx>343.49636753580074</p_fx>
+            <p_fy>343.49636753580074</p_fy>
+            <p_cx>320.0</p_cx>
+            <p_cy>180.0</p_cy>
+            <tx>-27.47970940286406</tx>
             <ty>0</ty>
           </projection>
         </lens>

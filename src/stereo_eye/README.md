@@ -116,11 +116,11 @@ optical frames) are massless on purpose. Gazebo merges them into their parents.
 |---|---|
 | Type | Single stereo pair, ZED-Mini / OAK-D-like |
 | Baseline | **0.080 m** (lenses at y = ±0.04 on `stereo_bar_link`; why 80 mm: see `STEREO_DESIGN.md`) |
-| Resolution | **1280 × 720 (720p) per eye**, R8G8B8 |
-| Frame rate | 15 fps, same rate for both cameras (synchronised) |
+| Resolution | **640 × 360 per eye**, R8G8B8 (below the original ≥ 720p requirement: a deliberate trade for sim performance; set `cam_w=1280`, `cam_h=720` in the xacro to restore) |
+| Frame rate | 24 fps, same rate for both cameras (synchronised) |
 | Horizontal FOV | 1.5 rad (85.9°); vertical ≈ 0.965 rad (55.3°) from the 16:9 aspect |
-| Focal length | fx = fy = (1280/2) / tan(1.5/2) = **686.99 px**; cx = 640, cy = 360 (identical for both cameras) |
-| Right-camera projection Tx | −fx · B = **−54.96** (so `camera_info` P[3] carries the baseline for stereo/RTAB-Map) |
+| Focal length | fx = fy = (640/2) / tan(1.5/2) = **343.50 px**; cx = 320, cy = 180 (identical for both cameras) |
+| Right-camera projection Tx | −fx · B = **−27.48** (so `camera_info` P[3] carries the baseline for stereo/RTAB-Map) |
 | Clip range (sim) | 0.05-40 m |
 | Mounting height | lens centre **0.2625 m** above ground, 0.061 m ahead of the axle, looking straight ahead (0° pitch) |
 | Optical frames | `camera_left_optical_frame`, `camera_right_optical_frame`, rpy (−π/2, 0, −π/2) per **REP-103** |
@@ -172,7 +172,7 @@ simulator-agnostic. It declares:
 
 | Element | Details |
 |---|---|
-| `stereo_left`, `stereo_right` camera sensors | On `camera_left_link` / `camera_right_link`: 1280×720, 15 Hz (same rate, so same stamps), HFOV 1.5, clip 0.05–15 m, Gaussian noise σ 0.005, identical lens intrinsics + projection (right Tx = −54.96), topics `stereo/{left,right}/image_raw` + `stereo/{left,right}/camera_info`; frame = the optical frame via both `<ignition_frame_id>` (Fortress, ign-sensors 6.2+) and `<gz_frame_id>` (Garden/Harmonic) |
+| `stereo_left`, `stereo_right` camera sensors | On `camera_left_link` / `camera_right_link`: 640×360, 24 Hz (same rate, so same stamps), HFOV 1.5, clip 0.05–15 m, Gaussian noise σ 0.005, identical lens intrinsics + projection (right Tx = −27.48), topics `stereo/{left,right}/image_raw` + `stereo/{left,right}/camera_info`; frame = the optical frame via both `<ignition_frame_id>` (Fortress, ign-sensors 6.2+) and `<gz_frame_id>` (Garden/Harmonic) |
 | `imu_sensor` | On `imu_link` (both frame tags), 100 Hz, topic `imu`, gyro σ 0.0009 rad/s, accel σ 0.017 m/s² |
 | DiffDrive plugin | `left/right_wheel_joint`, separation 0.19, radius 0.065, limits ±0.6 m/s, ±2 rad/s, ±1 m/s², ±3 rad/s²; `cmd_vel` → `odom` + `tf` (odom → base_footprint) at 30 Hz |
 | JointStatePublisher plugin | Publishes both wheel joints on `joint_states` |
@@ -234,7 +234,7 @@ root Link: base_footprint
 links: 13  joints: 12  total mass: 3.160 kg  COM: (-0.0212, 0, 0.0963) m
 inertia tensors positive & triangle inequality: True
 optical frames: z = forward, x = right, y = down for both cameras; stereo baseline 0.080 m (TF) = -Tx/fx
-both camera sensors: identical 1280x720, 15 Hz, HFOV 1.5, fx = fy = 686.99
+both camera sensors: identical 640x360, 24 Hz, HFOV 1.5, fx = fy = 343.50, cx = 320, cy = 180
 no <mesh> / package:// references (primitives only)
 ```
 xacro expands without errors both with and without the Gazebo file.
