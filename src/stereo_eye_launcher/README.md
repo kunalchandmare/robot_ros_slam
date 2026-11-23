@@ -369,6 +369,31 @@ Or run it in a separate terminal (useful if xterm is not available):
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```
 
+## Saving logs
+
+To keep a copy of everything a launch prints, start the simulation with the run
+script instead of calling `ros2 launch` yourself. From `/workspaces/ros2-dev`:
+
+```bash
+cd /workspaces/ros2-dev
+./src/stereo_eye_launcher/scripts/run_sim.sh
+```
+
+Launch arguments pass straight through, for example
+`./src/stereo_eye_launcher/scripts/run_sim.sh rviz:=false teleop:=false`.
+The output still shows on screen as usual.
+
+The files end up in `/workspaces/ros2-dev/src/stereo_eye_launcher/logs/`:
+
+- `launch_<YYYY-mm-dd_HH-MM-SS>.log` holds the full screen output of that run
+  (stdout and stderr), one new file per run.
+- Each node's own ROS log files land there too, because the script sets
+  `ROS_LOG_DIR` to this folder.
+
+The script finds `logs/` relative to its own location and creates it if it is
+missing. The logs are plain text and are not gitignored, so you can commit one
+or attach it when asking for help with debugging.
+
 ## Quick checks after launch
 
 ```bash
