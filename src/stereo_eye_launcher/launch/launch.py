@@ -180,12 +180,18 @@ def generate_launch_description():
 
     # Sim images have no distortion (R = identity), so they are already
     # rectified. Remap image_raw onto RTAB-Map's image_rect inputs; do not
-    # rename the bridge topics. Exact sync (approx_sync false): the two gz
-    # camera sensors share the same update_rate and are rendered in one
-    # Sensors-system step, so left/right (and VO odom) carry identical
-    # sim-time stamps. That is the gz-sim stand-in for a Classic multicamera
-    # sensor. If a loaded bridge ever desynchronizes them, switch to
-    # approx_sync true with approx_sync_max_interval 0.01.
+    # rename the bridge topics.
+    #
+    # Approximate sync (approx_sync true): in theory both gz cameras render in
+    # one Sensors-system step and share a stamp, but under load (1280x720 x2)
+    # the sim slows down and the left/right (and /odom) stamps stop matching
+    # exactly. Exact sync then dropped nearly every frame ("Did not receive
+    # data since 5 seconds"). Approx sync pairs messages whose stamps are at
+    # most approx_sync_max_interval (20 ms) apart. rtabmap also syncs /odom
+    # with the images, so it needs approx sync too.
+    #
+    # Queue sizes: sync_queue_size is the synchronizer's buffer (replaces the
+    # deprecated queue_size); topic_queue_size is each subscriber's buffer.
     stereo_remaps = [
         ('left/image_rect', '/stereo/left/image_raw'),
         ('left/camera_info', '/stereo/left/camera_info'),
@@ -196,9 +202,11 @@ def generate_launch_description():
     stereo_common_params = {
         'use_sim_time': use_sim_time,
         'frame_id': 'base_footprint',
-        'approx_sync': False,
+        'approx_sync': True,
+        'approx_sync_max_interval': 0.02,
         'wait_for_transform': 0.2,
-        'queue_size': 20,
+        'sync_queue_size': 20,
+        'topic_queue_size': 10,
         'Reg/Force3DoF': 'true',
         'Stereo/MaxDisparity': '160',
     }
@@ -234,7 +242,7 @@ def generate_launch_description():
             'subscribe_rgb': False,
             'subscribe_rgbd': False,
             'subscribe_odom_info': True,
-            'Grid/FromDepth': 'true',
+            'Grid/Sensor': '1',  # 1 = depth (from stereo); was Grid/FromDepth true
             'Grid/RangeMax': '4.0',
             'Grid/MaxGroundHeight': '0.05',
             'Grid/MaxObstacleHeight': '0.40',
