@@ -40,8 +40,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Small extras go in their own step, so adding one later does not
 # re-download everything above (Docker caches each RUN step separately).
 # mesa-utils: provides glxinfo; "glxinfo -B" shows which GPU OpenGL uses.
+# ros-humble-rqt-robot-steering: slider window to drive the robot (/cmd_vel)
+#   without needing keyboard focus on a teleop terminal.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     mesa-utils \
+    ros-humble-rqt-robot-steering \
     && rm -rf /var/lib/apt/lists/*
 
 # Initialize rosdep (optional but recommended)
