@@ -86,8 +86,13 @@ def generate_launch_description():
             description='Start RViz2 with the stereo SLAM config if true',
         ),
         DeclareLaunchArgument(
-            'teleop',
+            'steering',
             default_value='true',
+            description='Start rqt_robot_steering (mouse sliders on /cmd_vel) if true',
+        ),
+        DeclareLaunchArgument(
+            'teleop',
+            default_value='false',
             description='Start teleop_twist_keyboard in an xterm if true',
         ),
         # Ogre2 crashes on the WSL D3D12 GPU driver (Ogre UnimplementedException
@@ -341,16 +346,44 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('rviz')),
     )
 
-    # Default topic is cmd_vel, which matches the ros_gz_bridge /cmd_vel
-    # (ROS -> Gazebo) mapping. xterm is required so the node has a TTY for
-    # key input; disable with teleop:=false if no display is available.
+    # Driving. Recommended speeds for visual odometry: 0.15 m/s and 0.4 rad/s.
+    #
+    # rqt_robot_steering (default): a small window with mouse sliders that
+    # publishes geometry_msgs/Twist on /cmd_vel, which the bridge forwards to
+    # Gazebo. Unlike the keyboard teleop it does not need keyboard focus, so it
+    # keeps working after you click RViz or Gazebo. The slider ranges below are
+    # capped at the recommended speeds; raise them in the window if needed.
+    # No node name is set, because rqt picks its own and the parameters are
+    # then applied to it through the "/**" wildcard.
+    steering = Node(
+        package='rqt_robot_steering',
+        executable='rqt_robot_steering',
+        output='screen',
+        parameters=[{
+            'default_topic': '/cmd_vel',
+            'default_vx_max': 0.15,
+            'default_vx_min': -0.15,
+            'default_vw_max': 0.4,
+            'default_vw_min': -0.4,
+        }],
+        condition=IfCondition(LaunchConfiguration('steering')),
+    )
+
+    # teleop_twist_keyboard (optional, teleop:=true): only reads keys while its
+    # xterm window has keyboard focus. Clicking RViz or Gazebo takes focus away,
+    # so click the xterm again before pressing keys. Its start speeds are the
+    # recommended 0.15 m/s ("speed") and 0.4 rad/s ("turn").
     teleop = Node(
         package='teleop_twist_keyboard',
         executable='teleop_twist_keyboard',
         name='teleop_twist_keyboard',
         prefix='xterm -e',
         output='screen',
-        parameters=[{'use_sim_time': True}],
+        parameters=[{
+            'use_sim_time': True,
+            'speed': 0.15,
+            'turn': 0.4,
+        }],
         condition=IfCondition(LaunchConfiguration('teleop')),
     )
 
@@ -366,5 +399,6 @@ def generate_launch_description():
         rtabmap,
         camera_brightness,
         rviz,
+        steering,
         teleop,
     ])

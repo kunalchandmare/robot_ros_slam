@@ -3,7 +3,7 @@
 #
 # Usage (from /workspaces/ros2-dev):
 #   ./src/stereo_eye_launcher/scripts/run_sim.sh [launch args...]
-#   ./src/stereo_eye_launcher/scripts/run_sim.sh rviz:=false teleop:=false
+#   ./src/stereo_eye_launcher/scripts/run_sim.sh rviz:=false steering:=false
 #
 # What it does:
 #   1. Sources the workspace overlay (/workspaces/ros2-dev/install/setup.bash).

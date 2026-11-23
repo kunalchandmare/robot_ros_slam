@@ -28,6 +28,8 @@ stereo_eye_launcher/
 - ROS 2 Humble with Gazebo Fortress (the default `ros-humble-ros-gz` pairing)
 - `ros_gz_sim`, `ros_gz_bridge`, `robot_state_publisher`, `xacro`
 - `rtabmap_odom` and `rtabmap_slam` (from `ros-humble-rtabmap-ros`, already in the Dockerfile)
+- `rqt_robot_steering` (`ros-humble-rqt-robot-steering`) for driving with the mouse
+- `teleop_twist_keyboard` and `xterm`, only if you use `teleop:=true`
 - The `stereo_eye`, `apartment_gazebo`, and `camera_brightness` packages in the same workspace
 
 ## Build and run
@@ -56,7 +58,8 @@ Sourcing `/workspaces/ros2-dev/install/setup.bash` is required so
 | `z`            | `0.05`                                          | Spawn height (m), small drop onto floor  |
 | `yaw`          | `0.0`                                           | Spawn heading (rad), faces +X            |
 | `rviz`         | `true`                                          | Start RViz2 with `stereo_slam.rviz`      |
-| `teleop`       | `true`                                          | Start `teleop_twist_keyboard` in xterm   |
+| `steering`     | `true`                                          | Start `rqt_robot_steering` (mouse sliders) |
+| `teleop`       | `false`                                         | Start `teleop_twist_keyboard` in xterm   |
 | `render_engine`| `ogre`                                          | Gazebo render engine, `ogre` or `ogre2`  |
 
 Example: `ros2 launch stereo_eye_launcher launch.py x:=3.0 y:=4.5 yaw:=1.57`
@@ -354,8 +357,9 @@ With the simulation running (in another terminal, after sourcing
 
 3. Look at it in RViz. The launch file's RViz already has a **TF** display. In
    the Displays panel, expand **TF** and tick **Show Names** (and **Show Axes**)
-   to see each frame's name and its red/green/blue axes. Drive with teleop and
-   watch the wheel frames spin and `base_footprint` move away from `odom`.
+   to see each frame's name and its red/green/blue axes. Drive with the
+   steering sliders and watch the wheel frames spin and `base_footprint` move
+   away from `odom`.
 
 ## RViz
 
@@ -398,23 +402,39 @@ relative names `map` (OccupancyGrid) and `cloud_map` (PointCloud2), which
 resolve to `/map` and `/cloud_map`. Older ROS 1 names such as `/rtabmap/grid_map`
 or `proj_map` do not apply here.
 
-## Teleop
+## Driving the robot
 
-An xterm window running `teleop_twist_keyboard` opens automatically and
-publishes `geometry_msgs/Twist` on `/cmd_vel`, which the ros_gz_bridge
-forwards to Gazebo. Click that window first, then use the keys it prints
-(`i`/`j`/`l`/`k` and so on) to drive the robot.
+Drive slowly. Visual odometry needs consecutive camera frames to overlap, so
+the recommended speeds are **0.15 m/s** forward and **0.4 rad/s** turning.
+Faster turns, especially in front of plain walls, are the most common reason
+odometry gets lost.
 
-Disable it with `teleop:=false`:
+**Mouse sliders (default).** A small **Robot Steering** window
+(`rqt_robot_steering`) opens with the launch. Drag the top slider to drive
+forward or back and the bottom slider to turn, and press **stop** to halt.
+It publishes `geometry_msgs/Twist` on `/cmd_vel`, which the ros_gz_bridge
+forwards to Gazebo. It does not need keyboard focus, so it keeps working after
+you click RViz or Gazebo. The sliders are capped at the recommended speeds;
+you can raise the limits in the window's number boxes. If the window shows
+another topic, type `/cmd_vel` in its topic box.
+
+**Keyboard (optional).** Start `teleop_twist_keyboard` in an xterm with
+`teleop:=true`:
 
 ```bash
-ros2 launch stereo_eye_launcher launch.py teleop:=false
+ros2 launch stereo_eye_launcher launch.py teleop:=true
 ```
 
-Or run it in a separate terminal (useful if xterm is not available):
+It only reads keys while its xterm window has keyboard focus. Clicking RViz or
+Gazebo takes the focus away, so click the xterm again before pressing
+`i`/`j`/`l`/`k` and so on. It starts at 0.15 m/s and 0.4 rad/s; avoid the keys
+that raise the speed (`q`, `w`, `e`).
+
+To run either one by hand in a separate terminal:
 
 ```bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard
+ros2 run rqt_robot_steering rqt_robot_steering
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -p speed:=0.15 -p turn:=0.4
 ```
 
 ## Saving logs
@@ -428,7 +448,7 @@ cd /workspaces/ros2-dev
 ```
 
 Launch arguments pass straight through, for example
-`./src/stereo_eye_launcher/scripts/run_sim.sh rviz:=false teleop:=false`.
+`./src/stereo_eye_launcher/scripts/run_sim.sh rviz:=false steering:=false`.
 The output still shows on screen as usual.
 
 The files end up in `/workspaces/ros2-dev/src/stereo_eye_launcher/logs/`:

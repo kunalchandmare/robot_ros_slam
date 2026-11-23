@@ -23,6 +23,7 @@
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>
   <exec_depend>rtabmap_odom</exec_depend>
+  <exec_depend>rqt_robot_steering</exec_depend>
   <exec_depend>rtabmap_slam</exec_depend>
   <exec_depend>rviz2</exec_depend>
   <exec_depend>stereo_eye</exec_depend>
