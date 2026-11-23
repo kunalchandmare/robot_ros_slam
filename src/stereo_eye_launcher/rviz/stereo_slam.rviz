@@ -87,6 +87,35 @@ Visualization Manager:
       Topic:
         Value: /odom
 
+    # Exploration (explore:=true only; without it these topics are absent
+    # and the displays just show a warning).
+    # Nav2 global costmap: rtabmap /map plus inflation around walls.
+    - Class: rviz_default_plugins/Map
+      Name: Global Costmap
+      Enabled: false
+      Alpha: 0.4
+      Color Scheme: costmap
+      Topic:
+        Value: /global_costmap/costmap
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+
+    # Frontiers found by explore_lite (blue = candidates, red = blacklisted,
+    # green sphere = the chosen goal).
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Frontiers
+      Enabled: true
+      Topic:
+        Value: /explore/frontiers
+
+    # Path the Nav2 planner computed to the current frontier
+    - Class: rviz_default_plugins/Path
+      Name: Plan
+      Enabled: true
+      Color: 25; 255; 0
+      Topic:
+        Value: /plan
+
   Tools:
     - Class: rviz_default_plugins/Interact
     - Class: rviz_default_plugins/MoveCamera

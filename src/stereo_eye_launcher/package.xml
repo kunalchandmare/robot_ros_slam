@@ -8,7 +8,8 @@
     ros-humble-ros-gz) simulation of the stereo_eye robot inside the
     apartment_gazebo world, including robot_state_publisher, a ros_gz_bridge
     for clock, sensors, and drive topics, stereo visual odometry, and
-    RTAB-Map stereo SLAM.
+    RTAB-Map stereo SLAM. With explore:=true, Nav2 and explore_lite explore
+    the apartment autonomously and the 2D map is saved to maps/.
   </description>
   <maintainer email="kunal@example.com">Kunal</maintainer>
   <license>Apache-2.0</license>
@@ -17,10 +18,14 @@
 
   <exec_depend>apartment_gazebo</exec_depend>
   <exec_depend>camera_brightness</exec_depend>
+  <exec_depend>explore_lite</exec_depend>
   <exec_depend>explore_lite_msgs</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend>
   <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>nav2_navfn_planner</exec_depend>
+  <exec_depend>nav2_regulated_pure_pursuit_controller</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>

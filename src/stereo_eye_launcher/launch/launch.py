@@ -15,7 +15,12 @@ from launch.actions import (
 )
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import (
+    Command,
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
+)
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -28,6 +33,7 @@ def generate_launch_description():
     y = LaunchConfiguration('y')
     z = LaunchConfiguration('z')
     yaw = LaunchConfiguration('yaw')
+    explore = LaunchConfiguration('explore')
 
     default_world = PathJoinSubstitution([
         FindPackageShare('apartment_gazebo'),
@@ -47,6 +53,21 @@ def generate_launch_description():
         FindPackageShare('ros_gz_sim'),
         'launch',
         'gz_sim.launch.py',
+    ])
+    nav2_navigation_launch = PathJoinSubstitution([
+        FindPackageShare('nav2_bringup'),
+        'launch',
+        'navigation_launch.py',
+    ])
+    nav2_params = PathJoinSubstitution([
+        FindPackageShare('stereo_eye_launcher'),
+        'config',
+        'nav2_params.yaml',
+    ])
+    explore_params = PathJoinSubstitution([
+        FindPackageShare('stereo_eye_launcher'),
+        'config',
+        'explore_params.yaml',
     ])
 
     # Living-room pose recommended by apartment_gazebo: clear of the sofa
@@ -104,6 +125,26 @@ def generate_launch_description():
             default_value='ogre',
             choices=['ogre', 'ogre2'],
             description='Gazebo render engine for server (camera sensors) and GUI',
+        ),
+        # Autonomous frontier exploration: Nav2 + explore_lite drive the robot
+        # and explore_map_saver.py saves the 2D map when no frontiers are left.
+        DeclareLaunchArgument(
+            'explore',
+            default_value='false',
+            description='Explore autonomously (Nav2 + explore_lite) and save the map if true; '
+                        'turns off steering and teleop',
+        ),
+        # Maps are written to the package source folder (like logs/), not to
+        # install/, so they survive a rebuild and are easy to find.
+        DeclareLaunchArgument(
+            'maps_dir',
+            default_value='/workspaces/ros2-dev/src/stereo_eye_launcher/maps',
+            description='Folder where explore:=true saves <map_name>_<date>.pgm/.yaml',
+        ),
+        DeclareLaunchArgument(
+            'map_name',
+            default_value='apartment',
+            description='File name prefix for the saved map',
         ),
     ]
 
@@ -290,6 +331,43 @@ def generate_launch_description():
     # odom_frame_id is left unset so rtabmap subscribes to the /odom topic
     # from stereo_odometry (setting it would read TF only and drop the topic).
     # That topic's frame is vo, so rtabmap publishes only map -> vo.
+    #
+    # Map settings (rtabmap parameters are strings). The 2D grid on /map is
+    # what Nav2 and explore_lite use, so it should be flat and well filled:
+    #   Reg/Force3DoF true (in stereo_common_params): x, y, yaw only, so the
+    #                       map cannot tilt or float on a flat floor.
+    #   RGBD/ProximityBySpace true: also look for loop closures with nearby
+    #                       old nodes (by position, not only by image
+    #                       similarity), which closes small drifts and stops
+    #                       walls from doubling. This is rtabmap's default;
+    #                       set explicitly because the map depends on it.
+    #   Grid/Sensor 1       Build the grid from stereo depth (no laser).
+    #   Grid/3D false       2D grid cells only (no OctoMap), which is lighter
+    #                       and makes /map come straight from 2D local grids.
+    #   Grid/CellSize 0.05  5 cm cells (same as the Nav2 costmaps).
+    #   Grid/RangeMax 4.0   Use depth up to 4 m. Stereo depth error grows with
+    #                       distance squared: with fx 343.5 px and a 0.08 m
+    #                       baseline one pixel of disparity is about 0.58 m at
+    #                       4 m and 0.15 m at 2 m. Lower this to 3.0 if walls
+    #                       look thick or blurry.
+    #   Grid/RayTracing true Mark the cells between the camera and each
+    #                       obstacle as free, so rooms fill in as free space
+    #                       instead of staying unknown (frontiers need that).
+    #   Grid/NormalsSegmentation false Split ground from obstacles by height
+    #                       only (below MaxGroundHeight = floor, between that
+    #                       and MaxObstacleHeight = obstacle). Simple and
+    #                       robust on the flat sim floor; normals from noisy
+    #                       stereo points are not.
+    #   Grid/MaxGroundHeight 0.05 Points up to 5 cm high are floor.
+    #   Grid/MaxObstacleHeight 0.40 Ignore points above 40 cm (table tops,
+    #                       ceiling) that the low robot drives under or never
+    #                       reaches.
+    #   Grid/NoiseFilteringRadius 0.05 and Grid/NoiseFilteringMinNeighbors 5:
+    #                       drop obstacle points with fewer than 5 neighbours
+    #                       within 5 cm (isolated stereo speckles), which
+    #                       would otherwise show up as fake obstacles.
+    #   RGBD/LinearUpdate / AngularUpdate 0.05: add a map node every 5 cm or
+    #                       0.05 rad of motion, so the map grows smoothly.
     rtabmap = Node(
         package='rtabmap_slam',
         executable='rtabmap',
@@ -305,11 +383,17 @@ def generate_launch_description():
             'subscribe_rgb': False,
             'subscribe_rgbd': False,
             'subscribe_odom_info': True,
+            'RGBD/ProximityBySpace': 'true',
             'Grid/Sensor': '1',  # 1 = depth (from stereo); was Grid/FromDepth true
+            'Grid/3D': 'false',
+            'Grid/CellSize': '0.05',
             'Grid/RangeMax': '4.0',
+            'Grid/RayTracing': 'true',
+            'Grid/NormalsSegmentation': 'false',
             'Grid/MaxGroundHeight': '0.05',
             'Grid/MaxObstacleHeight': '0.40',
-            'Grid/RayTracing': 'true',
+            'Grid/NoiseFilteringRadius': '0.05',
+            'Grid/NoiseFilteringMinNeighbors': '5',
             'RGBD/LinearUpdate': '0.05',
             'RGBD/AngularUpdate': '0.05',
         }],
@@ -348,6 +432,21 @@ def generate_launch_description():
 
     # Driving. Recommended speeds for visual odometry: 0.15 m/s and 0.4 rad/s.
     #
+    # Manual driving is only started when explore is false: rqt_robot_steering
+    # publishes /cmd_vel all the time (zero when the sliders are centred), so
+    # it would fight Nav2 for the robot. With explore:=true, steering:=true and
+    # teleop:=true are ignored. To take over, stop the launch and start again
+    # without explore.
+    #
+    # Launch booleans may be written true/True/1, hence the lower() checks.
+    explore_off = ["'", explore, "'.lower() not in ('true', '1')"]
+    steering_on = PythonExpression(
+        ["'", LaunchConfiguration('steering'), "'.lower() in ('true', '1') and "] + explore_off
+    )
+    teleop_on = PythonExpression(
+        ["'", LaunchConfiguration('teleop'), "'.lower() in ('true', '1') and "] + explore_off
+    )
+    #
     # rqt_robot_steering (default): a small window with mouse sliders that
     # publishes geometry_msgs/Twist on /cmd_vel, which the bridge forwards to
     # Gazebo. Unlike the keyboard teleop it does not need keyboard focus, so it
@@ -366,7 +465,7 @@ def generate_launch_description():
             'default_vw_max': 0.4,
             'default_vw_min': -0.4,
         }],
-        condition=IfCondition(LaunchConfiguration('steering')),
+        condition=IfCondition(steering_on),
     )
 
     # teleop_twist_keyboard (optional, teleop:=true): only reads keys while its
@@ -384,7 +483,56 @@ def generate_launch_description():
             'speed': 0.15,
             'turn': 0.4,
         }],
-        condition=IfCondition(LaunchConfiguration('teleop')),
+        condition=IfCondition(teleop_on),
+    )
+
+    # ---- Autonomous exploration (explore:=true) ----
+    #
+    # Nav2 navigation only (controller, planner, behaviours, bt_navigator,
+    # velocity_smoother). No localization_launch.py: there is no AMCL or
+    # map_server, because rtabmap already provides map -> vo -> odom and the
+    # map itself on /map.
+    #
+    # cmd_vel path: controller_server publishes cmd_vel_nav, velocity_smoother
+    # limits it to 0.15 m/s / 0.4 rad/s and publishes /cmd_vel (both remaps
+    # are inside navigation_launch.py), and ros_gz_bridge forwards /cmd_vel to
+    # the Gazebo DiffDrive. Recovery behaviours (spin, back up) publish
+    # /cmd_vel directly.
+    nav2 = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(nav2_navigation_launch),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'params_file': nav2_params,
+            'autostart': 'true',
+        }.items(),
+        condition=IfCondition(explore),
+    )
+
+    # explore_lite (m-explore-ros2): finds frontiers on Nav2's global costmap
+    # and sends them as navigate_to_pose goals. It waits by itself until the
+    # costmap and the Nav2 action server are up.
+    explore_lite = Node(
+        package='explore_lite',
+        executable='explore',
+        name='explore_node',
+        output='screen',
+        parameters=[explore_params, {'use_sim_time': use_sim_time}],
+        condition=IfCondition(explore),
+    )
+
+    # Saves /map with nav2_map_server's map_saver_cli as soon as explore_lite
+    # publishes "exploration_complete" on /explore/status.
+    map_saver = Node(
+        package='stereo_eye_launcher',
+        executable='explore_map_saver.py',
+        name='explore_map_saver',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'maps_dir': LaunchConfiguration('maps_dir'),
+            'map_name': LaunchConfiguration('map_name'),
+        }],
+        condition=IfCondition(explore),
     )
 
     return LaunchDescription(declared_args + [
@@ -401,4 +549,7 @@ def generate_launch_description():
         rviz,
         steering,
         teleop,
+        nav2,
+        explore_lite,
+        map_saver,
     ])
