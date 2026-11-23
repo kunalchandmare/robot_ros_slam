@@ -14,13 +14,21 @@ actually installs.
 
 ```
 stereo_eye_launcher/
-├── CMakeLists.txt     # ament_cmake, installs launch/ and rviz/ into share/
+├── CMakeLists.txt     # ament_cmake, installs launch/, rviz/, config/ and the map saver
 ├── package.xml        # runtime dependencies
 ├── README.md
+├── config/
+│   ├── nav2_params.yaml     # Nav2 settings for explore:=true
+│   └── explore_params.yaml  # explore_lite settings for explore:=true
 ├── launch/
 │   └── launch.py      # the simulation + RTAB-Map + RViz launch file
-└── rviz/
-    └── stereo_slam.rviz
+├── logs/              # run_sim.sh writes launch logs here
+├── maps/              # explore:=true saves finished maps here
+├── rviz/
+│   └── stereo_slam.rviz
+└── scripts/
+    ├── run_sim.sh            # launch and save the output to logs/
+    └── explore_map_saver.py  # saves the map when exploration is done
 ```
 
 ## Requirements
@@ -31,6 +39,8 @@ stereo_eye_launcher/
 - `rqt_robot_steering` (`ros-humble-rqt-robot-steering`) for driving with the mouse
 - `teleop_twist_keyboard` and `xterm`, only if you use `teleop:=true`
 - The `stereo_eye`, `apartment_gazebo`, and `camera_brightness` packages in the same workspace
+- Only for `explore:=true`: Nav2 and explore_lite, see
+  [Autonomous exploration](#autonomous-exploration-exploretrue)
 
 ## Build and run
 
@@ -80,6 +90,9 @@ last line (see [Saving logs](#saving-logs)):
 | `steering`     | `true`                                          | Start `rqt_robot_steering` (mouse sliders) |
 | `teleop`       | `false`                                         | Start `teleop_twist_keyboard` in xterm   |
 | `render_engine`| `ogre`                                          | Gazebo render engine, `ogre` or `ogre2`  |
+| `explore`      | `false`                                         | Explore by itself (Nav2 + explore_lite) and save the map; turns off `steering` and `teleop` |
+| `maps_dir`     | `/workspaces/ros2-dev/src/stereo_eye_launcher/maps` | Where `explore:=true` saves the map |
+| `map_name`     | `apartment`                                     | File name prefix of the saved map        |
 
 Example: `ros2 launch stereo_eye_launcher launch.py x:=3.0 y:=4.5 yaw:=1.57`
 
@@ -546,6 +559,175 @@ If the simulation is paused afterwards, press the play button in Gazebo.
 `launch_<date>_<time>.log` plus each node's own ROS logs to
 `/workspaces/ros2-dev/src/stereo_eye_launcher/logs/`. Send the newest
 `launch_*.log` when asking for help. See [Saving logs](#saving-logs).
+
+## Autonomous exploration (explore:=true)
+
+### What frontier exploration is
+
+Instead of you driving with the sliders, the robot drives itself until it has
+mapped every room it can reach.
+
+The map has three kinds of cells: **free** (seen, nothing there), **occupied**
+(a wall or furniture) and **unknown** (not seen yet). A **frontier** is the
+border between free and unknown space, for example an open doorway or the
+edge of what the cameras have seen so far. The idea is simple:
+
+1. Find all frontiers in the current map.
+2. Pick a good one (close and large).
+3. Drive there. The cameras see new space, the map grows, the frontier moves.
+4. Repeat until no frontiers are left. Then the map is complete.
+
+Three parts do this together:
+
+- **rtabmap** builds the 2D map on `/map` from the stereo cameras (as before).
+- **explore_lite** (`m-explore-ros2`) finds frontiers and picks the next goal.
+- **Nav2** plans a path to that goal and drives the robot along it, slowly
+  (0.15 m/s, 0.4 rad/s), around walls and furniture.
+
+When explore_lite finds no more frontiers, `explore_map_saver.py` saves the map.
+
+### Install
+
+Nav2 comes from apt; the Dockerfile has it commented out:
+
+```bash
+sudo apt install ros-humble-navigation2 ros-humble-nav2-bringup
+```
+
+explore_lite has **no apt package for Humble** (it is not in the ROS Humble
+release list), so it is built from source in the workspace. The repo is
+<https://github.com/robo-friends/m-explore-ros2> (branch `main`). It contains
+two packages we need, `explore_lite` and `explore_lite_msgs`, plus
+`map_merge`, which we do not use. Ask the team where it should live (the
+Dockerfile or `src/`); building it by hand looks like this:
+
+```bash
+cd /workspaces/ros2-dev/src
+git clone https://github.com/robo-friends/m-explore-ros2.git
+cd /workspaces/ros2-dev
+colcon build --packages-up-to explore_lite stereo_eye_launcher
+source install/setup.bash
+```
+
+### Run it
+
+```bash
+cd /workspaces/ros2-dev
+./src/stereo_eye_launcher/scripts/run_sim.sh explore:=true
+```
+
+(or `ros2 launch stereo_eye_launcher launch.py explore:=true`). Then wait.
+Nothing happens for the first 10 to 30 seconds while Gazebo, rtabmap and
+Nav2 start up; after that the robot starts moving by itself.
+
+With `explore:=true` the **Robot Steering** window and the keyboard teleop do
+**not** start, even if you pass `steering:=true` or `teleop:=true`. The
+steering window sends `/cmd_vel` all the time (zero when the sliders are in
+the middle) and would fight Nav2 for the wheels. To drive by hand again, stop
+the launch and start it without `explore:=true`.
+
+How the drive commands flow: Nav2's controller sends `cmd_vel_nav`, the
+velocity smoother limits it to 0.15 m/s and 0.4 rad/s and sends `/cmd_vel`,
+and the ros_gz_bridge passes `/cmd_vel` to the robot in Gazebo, the same topic
+the steering window uses.
+
+### What you see in RViz
+
+- **Map** (grey): rtabmap's 2D map, growing as the robot moves.
+- **Frontiers**: explore_lite's markers. Blue dots are frontier edges, red dots
+  are frontiers it gave up on, green spheres mark the centre of each frontier
+  (bigger = more attractive).
+- **Plan** (green line): the path Nav2 is following to the current frontier.
+- **Global Costmap** (off by default; tick it in the Displays panel): the map
+  as Nav2 sees it, with a coloured safety margin around walls.
+
+### Where the map is saved
+
+When explore_lite reports that exploration is complete, the map is saved to
+
+```
+/workspaces/ros2-dev/src/stereo_eye_launcher/maps/apartment_<YYYY-mm-dd_HH-MM-SS>.pgm
+/workspaces/ros2-dev/src/stereo_eye_launcher/maps/apartment_<YYYY-mm-dd_HH-MM-SS>.yaml
+```
+
+The `.pgm` is the picture (white = free, black = wall, grey = unknown) and
+the `.yaml` says how big a pixel is (0.05 m) and where the map's corner sits.
+Change the folder or prefix with `maps_dir:=...` and `map_name:=...`. The
+terminal prints `Map saved: ...` when it is done.
+
+How "done" is detected: explore_lite publishes its state on `/explore/status`
+(`explore_lite_msgs/msg/ExploreStatus`). When it finds no frontiers left, it
+logs `No frontiers found, stopping.` or `All frontiers traversed/tried out,
+stopping.` and publishes `exploration_complete`. `explore_map_saver.py` waits
+for exactly that message, then runs `map_saver_cli`. You can watch it with:
+
+```bash
+ros2 topic echo /explore/status
+```
+
+### Save the map by hand
+
+You can save the current map at any time, also during exploration or
+without `explore:=true`, from a second terminal:
+
+```bash
+source /workspaces/ros2-dev/install/setup.bash
+ros2 run nav2_map_server map_saver_cli -t /map \
+  -f /workspaces/ros2-dev/src/stereo_eye_launcher/maps/apartment_manual \
+  --ros-args -p save_map_timeout:=10.0
+```
+
+### If it stops or gets stuck
+
+**Nothing moves at all.** Check the terminal for `Waiting for costmap to
+become available` (explore_lite) or `Timed out waiting for transform`
+(Nav2). Both mean the `map` frame is not there yet: rtabmap has not started
+mapping. Check that the camera images show up in RViz and that
+`ros2 run tf2_ros tf2_echo map base_footprint` prints a pose.
+
+**The robot is stuck against furniture or turning on the spot.** Nav2 first
+tries recoveries (clear the costmap, spin, wait, back up). If Nav2 gives up
+(the robot moved less than 10 cm in 15 s) or explore_lite sees no progress for
+60 s, that frontier is put on a blacklist (it turns red) and explore_lite picks
+another one. If it is truly wedged, put it back with the
+`set_pose` command in [Troubleshooting](#troubleshooting), and expect the map
+to be off afterwards.
+
+**Visual odometry got lost.** Signs are `Not enough inliers` from
+`stereo_odometry` and a map that stops growing. Odometry resets itself on the
+next frame, but the map may jump. The robot then usually continues. If the map
+is badly broken, stop and start again.
+
+**Exploration ends too early ("No frontiers found").** This happens when the
+map is still small, or when the frontiers left are smaller than
+`min_frontier_size` (0.5 m in `config/explore_params.yaml`). A map is saved
+anyway. To continue exploring, resume explore_lite:
+
+```bash
+ros2 topic pub --once /explore/resume std_msgs/msg/Bool "{data: true}"
+```
+
+Each time it finishes again a new, time-stamped map is saved. To pause
+exploration, publish `{data: false}` on the same topic.
+
+**It keeps going for a long time.** Small frontiers behind furniture or in
+noisy corners can keep it busy. Save the map by hand (above) whenever it looks
+good enough, then stop the launch.
+
+### Limitations
+
+- **No live obstacle sensor in Nav2.** There is no laser. Nav2 only knows the
+  obstacles that rtabmap has already put into `/map` (about once a second, and
+  only after the robot has moved a few centimetres). Something right in front
+  of the robot that rtabmap has not mapped yet is not avoided.
+- **Low obstacles and table tops.** The map only counts things between 5 cm
+  and 40 cm high (`Grid/MaxGroundHeight`, `Grid/MaxObstacleHeight`). Very low
+  objects are missed; the robot may drive under tables.
+- **Plain walls and fast turns** still make visual odometry weak, which can
+  bend or double walls in the map.
+- **Untested.** Nav2, explore_lite and the map saver were written against the
+  Humble sources but not run here (no ROS on the machine that edited this).
+  The files compile and parse; check the first real run carefully.
 
 ## Known limitations
 
