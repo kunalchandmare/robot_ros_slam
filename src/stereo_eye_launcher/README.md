@@ -47,6 +47,25 @@ ros2 launch stereo_eye_launcher launch.py
 Sourcing `/workspaces/ros2-dev/install/setup.bash` is required so
 `FindPackageShare` can find the robot and world packages.
 
+To also save everything the launch prints, use the run script instead of the
+last line (see [Saving logs](#saving-logs)):
+
+```bash
+./src/stereo_eye_launcher/scripts/run_sim.sh
+```
+
+### First run, step by step
+
+1. Build and start the simulation as above. Gazebo, RViz and a small
+   **Robot Steering** window open.
+2. Wait until the camera images show up in RViz (a few seconds).
+3. Drive slowly with the steering sliders, at about 0.15 m/s and 0.4 rad/s
+   (see [Driving the robot](#driving-the-robot)).
+4. Watch the grey occupancy map and the point cloud grow in RViz as the robot
+   sees more of the apartment.
+5. To stop, press Ctrl+C in the terminal where you started the launch.
+   Closing the Gazebo window also stops everything.
+
 ## Launch arguments
 
 | Argument       | Default                                         | Meaning                                  |
@@ -494,6 +513,39 @@ ros2 service call /reset_odom std_srvs/srv/Empty
 
 Tip: turn slowly, especially in front of plain walls. Fast turns change the view
 too much between frames, so the stereo matcher finds no features in common.
+
+**The map is stuck and does not recover.** First drive slowly towards a place
+with more detail (furniture, corners) for a few seconds. If the map still does
+not grow, restart the launch (Ctrl+C, then start it again). rtabmap starts with
+`-d`, which deletes the old map database, so every launch begins with a fresh
+map.
+
+**The robot tipped over or got stuck in furniture.** The simplest fix is to
+restart the launch. To put the robot back without restarting, Gazebo's
+`set_pose` service moves it to the default spawn pose:
+
+```bash
+ign service -s /world/apartment/set_pose \
+  --reqtype ignition.msgs.Pose --reptype ignition.msgs.Boolean --timeout 3000 \
+  --req 'name: "stereo_eye", position: {x: 4.0, y: 5.5, z: 0.05}, orientation: {w: 1}'
+```
+
+Moving the robot this way is a "teleport" that neither odometry saw, so the
+current map will no longer line up. Restart the launch if you want a clean map.
+Resetting the whole world also works on Gazebo versions that support it:
+
+```bash
+ign service -s /world/apartment/control \
+  --reqtype ignition.msgs.WorldControl --reptype ignition.msgs.Boolean --timeout 3000 \
+  --req 'reset: {all: true}'
+```
+
+If the simulation is paused afterwards, press the play button in Gazebo.
+
+**Where are the logs?** When you start with `run_sim.sh`, every run writes
+`launch_<date>_<time>.log` plus each node's own ROS logs to
+`/workspaces/ros2-dev/src/stereo_eye_launcher/logs/`. Send the newest
+`launch_*.log` when asking for help. See [Saving logs](#saving-logs).
 
 ## Known limitations
 
