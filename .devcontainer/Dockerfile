@@ -19,11 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # RTAB-Map (main packages)
     ros-humble-rtabmap \
     ros-humble-rtabmap-ros \
-    ros-humble-rtabmap-demos \
-    ros-humble-rtabmap-examples \
+    # ros-humble-rtabmap-demos \      (unused, slows rebuilds)
+    # ros-humble-rtabmap-examples \   (unused, slows rebuilds)
     # Navigation & simulation (optional but useful)
-    ros-humble-nav2-bringup \
-    ros-humble-turtlebot3* \
+    # ros-humble-nav2-bringup \       (unused for now, slows rebuilds)
+    # ros-humble-turtlebot3* \        (unused, very large, slows rebuilds)
     ros-humble-ros-gz \
     # Visualization and teleop (base image is ros:humble-ros-base, not desktop)
     ros-humble-rviz2 \
@@ -35,7 +35,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon-x11-0 \
     libgl1-mesa-glx \
     libgl1-mesa-dri \
-    # GPU check tool: glxinfo -B shows which renderer OpenGL uses
+    && rm -rf /var/lib/apt/lists/*
+
+# Small extras go in their own step, so adding one later does not
+# re-download everything above (Docker caches each RUN step separately).
+# mesa-utils: provides glxinfo; "glxinfo -B" shows which GPU OpenGL uses.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
