@@ -17,10 +17,15 @@
     <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
     <atmosphere type="adiabatic"/>
 
+    <!-- Physics: 4 ms steps at 250 Hz (0.004 x 250 = 1.0, so the target
+         real_time_factor stays at 1). That's 4x fewer physics steps than the
+         old 1 ms / 1000 Hz, so the sim can keep up with real time even with
+         stereo cameras rendering. A 4 ms step is plenty for a slow indoor
+         wheeled robot on a flat floor. -->
     <physics name="default_physics" default="true" type="ode">
-      <max_step_size>0.001</max_step_size>
+      <max_step_size>0.004</max_step_size>
       <real_time_factor>1</real_time_factor>
-      <real_time_update_rate>1000</real_time_update_rate>
+      <real_time_update_rate>250</real_time_update_rate>
     </physics>
 
     <!-- Gazebo Sim GUI (Fortress / ign-gazebo 6). A <gui> block in the world
