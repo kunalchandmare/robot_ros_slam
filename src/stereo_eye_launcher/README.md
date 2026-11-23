@@ -113,9 +113,12 @@ Example: `ros2 launch stereo_eye_launcher launch.py x:=3.0 y:=4.5 yaw:=1.57`
    distortion-free, so they are already rectified: `left/image_rect` and
    `right/image_rect` (and the matching `camera_info` topics) are remapped to
    `/stereo/{left,right}/image_raw` and `/stereo/{left,right}/camera_info`.
-   Exact sync is used (`approx_sync` false) because both cameras share the same
-   update rate and are rendered in one Sensors-system step, so their stamps
-   match. rtabmap takes `/odom` from stereo_odometry (plus `odom_info`) and
+   Approximate sync is used (`approx_sync` true, `approx_sync_max_interval`
+   0.02 s). Both cameras render in one Sensors-system step, but under load the
+   sim slows down and the left, right and `/odom` stamps stop matching exactly,
+   so exact sync dropped nearly every frame. Queues are `sync_queue_size` 20
+   (the synchronizer) and `topic_queue_size` 10 (each subscriber). rtabmap
+   builds its occupancy grid from stereo depth (`Grid/Sensor` 1). rtabmap takes `/odom` from stereo_odometry (plus `odom_info`) and
    waits up to 0.2 s for TF.
 
 9. **camera_brightness** is remapped from `/image` to `/stereo/left/image_raw`.
