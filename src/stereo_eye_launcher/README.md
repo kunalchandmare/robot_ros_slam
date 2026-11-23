@@ -421,12 +421,6 @@ see the RViz section below if you need to start it by hand.
 
 ## Known limitations
 
-- **Sensors may not publish yet.** `apartment.sdf` has no gz-sim system plugins. The
-  cameras and IMU need the `gz-sim-sensors-system` (render engine `ogre2`) and
-  `gz-sim-imu-system` plugins in the world, plus Physics, UserCommands and
-  SceneBroadcaster (declaring any world plugin disables the default set). If
-  `/stereo/*` or `/imu` are silent, add those to the `<world>` in `apartment.sdf`.
-  On Fortress the `gz-sim-*` filenames map to `ignition-gazebo-*`.
 - **Topic prefixes.** Topic names in the robot xacro are relative. If Gazebo publishes
   them under a prefix (for example `/model/stereo_eye/...`), check with
   `gz topic -l` (or `ign topic -l` on Fortress) and update the bridge arguments
