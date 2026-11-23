@@ -90,6 +90,16 @@ def generate_launch_description():
             default_value='true',
             description='Start teleop_twist_keyboard in an xterm if true',
         ),
+        # Ogre2 crashes on the WSL D3D12 GPU driver (Ogre UnimplementedException
+        # in GL3PlusTextureGpu::copyTo), so the default is the older Ogre 1.x
+        # engine, which works there. Use render_engine:=ogre2 on a native
+        # Linux GPU for better-looking images.
+        DeclareLaunchArgument(
+            'render_engine',
+            default_value='ogre',
+            choices=['ogre', 'ogre2'],
+            description='Gazebo render engine for server (camera sensors) and GUI',
+        ),
     ]
 
     robot_description = ParameterValue(
@@ -111,10 +121,17 @@ def generate_launch_description():
 
     # ros_gz_sim's gz_sim.launch.py accepts gz_args on Humble/Fortress (and
     # then execs "ign gazebo") as well as on Harmonic ("gz sim").
+    # --render-engine sets the engine for both the server (which renders the
+    # camera sensors) and the GUI; see the render_engine argument above.
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(gz_sim_launch),
         launch_arguments={
-            'gz_args': ['-r -v 1 ', world],
+            'gz_args': [
+                '-r -v 1 --render-engine ',
+                LaunchConfiguration('render_engine'),
+                ' ',
+                world,
+            ],
             'on_exit_shutdown': 'true',
         }.items(),
     )

@@ -57,8 +57,16 @@ Sourcing `/workspaces/ros2-dev/install/setup.bash` is required so
 | `yaw`          | `0.0`                                           | Spawn heading (rad), faces +X            |
 | `rviz`         | `true`                                          | Start RViz2 with `stereo_slam.rviz`      |
 | `teleop`       | `true`                                          | Start `teleop_twist_keyboard` in xterm   |
+| `render_engine`| `ogre`                                          | Gazebo render engine, `ogre` or `ogre2`  |
 
 Example: `ros2 launch stereo_eye_launcher launch.py x:=3.0 y:=4.5 yaw:=1.57`
+
+**Render engine.** The launch passes `--render-engine <render_engine>` to
+`ign gazebo`, which sets the engine for both the Gazebo server (it renders the
+camera sensors) and the GUI. The default is `ogre` (Ogre 1.x) because Ogre2
+crashes on the WSL D3D12 GPU driver with an Ogre `UnimplementedException` in
+`GL3PlusTextureGpu::copyTo`. On a native Linux GPU you can try
+`render_engine:=ogre2` for nicer images.
 
 ## What launch.py does, step by step
 
