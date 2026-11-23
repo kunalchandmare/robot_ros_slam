@@ -183,7 +183,8 @@ def generate_launch_description():
     # rename the bridge topics.
     #
     # Approximate sync (approx_sync true): in theory both gz cameras render in
-    # one Sensors-system step and share a stamp, but under load (1280x720 x2)
+    # one Sensors-system step and share a stamp, but under load (two
+    # cameras, first at 1280x720 @ 15 fps, now 640x360 @ 24 fps)
     # the sim slows down and the left/right (and /odom) stamps stop matching
     # exactly. Exact sync then dropped nearly every frame ("Did not receive
     # data since 5 seconds"). Approx sync pairs messages whose stamps are at

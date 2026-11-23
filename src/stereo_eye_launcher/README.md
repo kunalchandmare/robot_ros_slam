@@ -269,13 +269,14 @@ $$
 Z = \frac{f_x \cdot B}{d}
 $$
 
-Here \( f_x \approx 687 \) px (1280 px wide, 1.5 rad field of view), so
-\( f_x \cdot B \approx 54.96 \) px·m. That is the `-54.96` you see in
+The cameras are 640x360 at 24 fps with a 1.5 rad horizontal field of view, so
+\( f_x = 320 / \tan(0.75) \approx 343.5 \) px and
+\( f_x \cdot B \approx 27.48 \) px·m. That is the `-27.48` you see in
 `P[3]` of the right camera's `camera_info`. For example:
 
-- an object 1 m away has a disparity of about 55 px
-- an object 2 m away has a disparity of about 27.5 px
-- at 2 m, a 1-pixel matching error changes the depth by about 7 cm
+- an object 1 m away has a disparity of about 27.5 px
+- an object 2 m away has a disparity of about 13.7 px
+- at 2 m, a 1-pixel matching error changes the depth by about 15 cm
 
 The stereo maths only works if TF knows the exact baseline and that both
 cameras are parallel. That is why both cameras hang off one rigid
@@ -403,7 +404,7 @@ or attach it when asking for help with debugging.
 ros2 topic list
 ros2 topic hz /stereo/left/image_raw
 ros2 topic hz /odom
-ros2 topic echo --once /stereo/right/camera_info --field p   # expect P[3] = -54.96
+ros2 topic echo --once /stereo/right/camera_info --field p   # expect P[3] = -27.48
 ros2 run tf2_ros tf2_echo map base_footprint
 ```
 
