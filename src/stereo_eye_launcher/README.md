@@ -736,12 +736,30 @@ looks straight ahead, right inside the stereo blind zone. `launch.py` bridges
 it to ROS. It is used twice:
 
 - **0.04 to 0.30 m:** Nav2's local costmap marks what it sees as an obstacle,
-  so the robot slows down and steers away. The beam is narrow (25 degrees,
+  so the robot slows down and steers away. The global costmap (the one the
+  path planner uses) marks it too, so a new path goes around it. Every hit
+  is **kept for 20 s** (`observation_persistence`), even when the stereo
+  cloud would erase it. This matters for plain furniture, see below. The beam is narrow (25 degrees,
   straight ahead), so it never sees door frames or walls beside the robot and
   does not make it timid; it only sees what is really in front of the nose.
 - **closer than 0.04 m while driving forward** (the nose is practically
   touching): the stuck recovery (below) fires at once and backs up
   (`tof_too_close_m`, default 0.04 m).
+
+**Plain furniture (one-colour boxes).** The furniture in apartment_gazebo
+(bed, sofa, coffee table, kitchen counter, vanity) is plain boxes in one
+colour without a texture. Stereo depth needs texture: on a flat one-colour
+face the left and right images look the same everywhere, so no depth is
+measured there. Only the box's vertical edges against the textured wall
+behind it give a few points, and most of those are removed as "lonely
+points" by the cloud's noise filter. So the boxes are almost missing from
+rtabmap's map and from the stereo obstacles (in RViz: only a few red
+speckles and thin arcs where the furniture is). What reliably sees them is
+the ToF sensor (its beam at 5.5 cm hits every box). That is why its hits are
+kept for 20 s and also go into the planner's costmap: once the robot has
+touched a box face, Nav2 plans around it instead of straight through it
+again. It still has to get within 0.30 m of a box to notice it; the real fix
+is texture on the furniture in the world (asked for from apartment_gazebo).
 
 Readings of exactly the sensor's smallest range (`range_min`, 0.01 m since
 MechaX's update; it was 0.02 m) are ignored: Gazebo turns any too-small value

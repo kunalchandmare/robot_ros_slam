@@ -268,7 +268,8 @@ local_costmap:
           # 0.30 m and would show up as a phantom obstacle in front of the
           # robot.) Old ToF marks are still cleared: by rays to new ToF hits,
           # and by the stereo_clear rays that pass over these cells to floor
-          # points further away.
+          # points further away, but only once they are older than
+          # observation_persistence (20 s, below).
           inf_is_valid: False
           obstacle_max_range: 0.30    # (m) = sensor range (unchanged, see above)
           # (m) was 0.0. Gazebo clamps every finite reading below range_min
@@ -284,7 +285,16 @@ local_costmap:
           raytrace_min_range: 0.0
           min_obstacle_height: 0.0    # (m) the beam is low; keep every hit
           max_obstacle_height: 0.40
-          observation_persistence: 0.0
+          # (s) was 0.0 (latest scan only). Keep every ToF hit of the last
+          # 20 s. The obstacle layer first clears along the stereo rays and
+          # then marks ALL kept observations, so a ToF mark now survives the
+          # stereo clearing for 20 s. Why: plain one-colour furniture (bed,
+          # sofa, counter ... in apartment_gazebo) has no texture, so stereo
+          # sees almost nothing on it, and stereo rays to wrong far points ran
+          # through the box and wiped the ToF mark as soon as the robot had
+          # turned away. The robot then drove straight back into it. After
+          # 20 s things are as before (stereo may clear the mark again).
+          observation_persistence: 20.0
           expected_update_rate: 0.0
           # The sensor's front face is 0.115 m ahead of the robot centre, so
           # hits closer than 0.035 m lie inside the footprint (radius 0.15 m)
@@ -351,21 +361,48 @@ global_costmap:
       # The size follows rtabmap's /map, which grows as the robot explores.
       # The same live stereo obstacle layer as the local costmap, so the
       # planner routes around obstacles rtabmap has not mapped yet. Its clearing
-      # only lowers its own layer, so it never turns unknown /map cells into
-      # free space (frontiers stay correct).
+      # only lowers its own layer. (Note: with combination_method 1 a cell this
+      # layer has cleared, i.e. set to free, does replace an unknown /map cell
+      # in this costmap. Not changed here; it is why the ToF does not clear.)
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_topic: /map
         map_subscribe_transient_local: True
-      # Same two sources as in the local costmap (see the comments there).
+      # Same sources as in the local costmap (see the comments there); the
+      # ToF was added here too (see front_tof below).
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
         footprint_clearing_enabled: True  # never mark the robot's own cell
         max_obstacle_height: 0.45   # (m) layer-wide cut-off (above the sources' limits)
         combination_method: 1       # 1 = keep the highest cost of all layers
-        observation_sources: stereo_mark stereo_clear
+        # front_tof added (was "stereo_mark stereo_clear"): the planner
+        # never saw the ToF before, so with furniture that stereo cannot see
+        # (plain boxes) it kept planning straight through it, and only the
+        # local costmap stopped the robot at the box face (RPP "collision
+        # ahead", then the same path again). Now the box face the ToF has
+        # touched is an obstacle for planning too.
+        observation_sources: stereo_mark stereo_clear front_tof
+        # Same ToF settings as in the local costmap, with two differences:
+        # clearing False and no inf points. ToF clearing rays would set
+        # cells of this layer to "free", and with combination_method 1 that
+        # also turns UNKNOWN cells of rtabmap's map into free space in front
+        # of the robot (frontier search uses this costmap). Without clearing
+        # a ToF mark here lives 20 s (observation_persistence), then
+        # stereo_clear rays can erase it as before.
+        front_tof:
+          topic: /front_tof
+          data_type: "LaserScan"
+          marking: True
+          clearing: False
+          inf_is_valid: False         # "no echo" (inf) readings are dropped
+          obstacle_max_range: 0.30    # (m) = sensor range
+          obstacle_min_range: 0.025   # (m) ignore the range_min clamp readings
+          min_obstacle_height: 0.0
+          max_obstacle_height: 0.40
+          observation_persistence: 20.0  # (s) see the local costmap
+          expected_update_rate: 0.0
         stereo_mark:
           topic: /stereo/obstacle_cloud
           data_type: "PointCloud2"

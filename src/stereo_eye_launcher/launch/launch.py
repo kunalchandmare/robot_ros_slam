@@ -299,8 +299,8 @@ def generate_launch_description():
             '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
             # Front time-of-flight range sensor (gpu_lidar in
             # stereo_eye.gazebo.xacro, MechaX), 0.30 m range, covering the
-            # stereo blind zone. Read by the local costmap (obstacles 0.04 to
-            # 0.30 m away) and stuck_recovery.py (closer than 0.04 m).
+            # stereo blind zone. Read by both Nav2 costmaps (obstacles 0.04 to
+            # 0.30 m away, kept 20 s) and stuck_recovery.py (closer than 0.04 m).
             # Harmless if the sensor is not in the model yet (no messages).
             '/front_tof@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
         ],
