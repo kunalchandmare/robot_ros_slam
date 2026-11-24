@@ -320,6 +320,21 @@ def generate_launch_description():
     #   Odom/KeyFrameThr    Add a new keyframe to the local map when inliers
     #                       drop below 40 % (default 30 %), so the map refreshes
     #                       a little earlier during turns.
+    #
+    # publish_null_when_lost false: keeps ONE map across odometry resets.
+    # With the default (true), the first frame after an automatic reset is
+    # published on /odom with covariance 9999, which is how rtabmap_odom tells
+    # rtabmap "odometry restarted". rtabmap then starts a NEW map session
+    # ("Odometry is reset ... Increment map id!") that is not connected to the
+    # old one, and /map shows only the new, small session until a loop
+    # closure joins them: the explored map seems to vanish in RViz, Nav2's
+    # global costmap shrinks with it and explore_lite loses its frontiers.
+    # With false and a guess frame (guess_frame_id odom), rtabmap_odom
+    # restarts from the latest pose plus the wheel motion and publishes that
+    # first frame as a normal continuation, so rtabmap keeps extending the
+    # same map. While odometry is lost nothing is published on /odom (rtabmap
+    # just skips those frames), and the vo -> odom TF is still sent from the
+    # wheel guess, so the TF tree never breaks.
     stereo_odometry = Node(
         package='rtabmap_odom',
         executable='stereo_odometry',
@@ -330,6 +345,7 @@ def generate_launch_description():
             'odom_frame_id': 'vo',
             'guess_frame_id': 'odom',
             'publish_tf': True,
+            'publish_null_when_lost': False,
             'Odom/ResetCountdown': '1',
             'Odom/Strategy': '0',
             'Vis/FeatureType': '8',
