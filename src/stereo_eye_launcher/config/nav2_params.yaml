@@ -161,6 +161,15 @@ local_costmap:
       #                40 cm), so rays to the visible floor erase old marks in
       #                front of the robot. With marking points alone, empty
       #                floor would never clear stale obstacles.
+      # The front ToF sensor (/front_tof, ~10 cm range) is deliberately NOT a
+      # source here: its hits are at most ~0.2 m from the robot centre, inside
+      # the padded footprint (radius 0.25 m). footprint_clearing_enabled
+      # erases every mark under that footprint at once, and turning footprint
+      # clearing off would leave the robot "in collision" with itself. Also,
+      # with inf_is_valid a no-echo reading (inf) becomes a point at range_max,
+      # which a 10 cm sensor cannot tell apart from a real hit. The ToF sensor
+      # is used by stuck_recovery.py instead (back up and pick another
+      # frontier).
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True

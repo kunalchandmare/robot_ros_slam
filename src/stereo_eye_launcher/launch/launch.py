@@ -251,11 +251,11 @@ def generate_launch_description():
             '/wheel_tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V',
             '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
             '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
-            # Front bumper contact sensor (stereo_eye.gazebo.xacro, MechaX).
-            # Gazebo only publishes while the plate touches something, and
-            # only if the world loads the Contact system; without either this
-            # line is harmless (no messages). Read by stuck_recovery.py.
-            '/bumper@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts',
+            # Front time-of-flight range sensor (gpu_lidar in
+            # stereo_eye.gazebo.xacro, MechaX), about 10 cm range, covering
+            # the stereo blind zone. Read by stuck_recovery.py. Harmless if
+            # the sensor is not in the model yet (no messages).
+            '/front_tof@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
         ],
         remappings=[
             ('/odom', '/wheel_odom'),
@@ -612,12 +612,13 @@ def generate_launch_description():
         condition=IfCondition(explore),
     )
 
-    # Stuck watchdog (explore:=true only): notices a bumper contact, or /cmd_vel
-    # asking to drive while visual odometry (/odom) does not move, then makes
+    # Stuck watchdog (explore:=true only): notices the front ToF sensor seeing
+    # something, or /cmd_vel asking to drive while visual odometry (/odom)
+    # does not move, then makes
     # explore_lite give up that frontier, backs up 0.2 m, turns ~90 degrees
     # and lets exploration continue. All thresholds are parameters of the node
-    # (see the header of scripts/stuck_recovery.py). /bumper comes from the
-    # bridge above; the world must load Gazebo's Contact system (README).
+    # (see the header of scripts/stuck_recovery.py). /front_tof comes from
+    # the bridge above.
     stuck_recovery = Node(
         package='stereo_eye_launcher',
         executable='stuck_recovery.py',
@@ -625,8 +626,8 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'use_sim_time': use_sim_time,
-            'bumper_topic': '/bumper',
-            'bumper_type': 'contacts',   # contacts | bool | none
+            'tof_topic': '/front_tof',
+            'tof_too_close_m': 0.0,      # <= 0: anything within the sensor's range_max
         }],
         condition=IfCondition(explore),
     )

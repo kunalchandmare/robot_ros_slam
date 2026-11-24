@@ -4,12 +4,14 @@
 Started by launch.py only when explore:=true.
 
 When is the robot "stuck"? Either of:
-  1. Bumper: a contact on the bumper topic (default /bumper). The type is a
-     parameter: "contacts" (ros_gz_interfaces/msg/Contacts, from a Gazebo
-     contact sensor through ros_gz_bridge), "bool" (std_msgs/msg/Bool) or
-     "none" (no bumper). Contacts whose collision names contain one of
-     bumper_ignore (default "ground_plane") are ignored, so touching the
-     floor does not count.
+  1. Too close: the front time-of-flight (ToF) range sensor (tof_topic,
+     default /front_tof, sensor_msgs/msg/LaserScan from a Gazebo gpu_lidar,
+     about 10 cm range) sees something. It covers the stereo blind zone right
+     in front of the robot. A reading counts if it is finite, >= range_min and
+     < tof_too_close_m. tof_too_close_m <= 0 (default) means "use the scan's
+     own range_max", i.e. anything the sensor sees at all is too close.
+     "No echo" readings (inf, or exactly range_max) never count. The recovery
+     starts at once, no waiting.
   2. Pushing without moving: the speed command that reaches the robot
      (/cmd_vel, after Nav2's velocity smoother) has been faster than
      min_cmd_speed (0.05 m/s) for stuck_time (2 s), but the VISUAL odometry
@@ -21,6 +23,9 @@ When is the robot "stuck"? Either of:
      counts as not moving (treat_lost_odom_as_stuck).
 
 What happens then:
+  The same reading cannot fire twice: ToF readings are ignored while a
+  recovery runs and during the cooldown after it.
+
   a. Make explore_lite give up on its current frontier. Simply cancelling the
      Nav2 goal does NOT work: explore_lite (m-explore-ros2 326cf8a,
      Explore::reachedGoal) ignores CANCELED goals ("might be because
@@ -61,6 +66,7 @@ import tf2_ros
 from geometry_msgs.msg import PoseStamped, Twist
 from nav2_msgs.action import NavigateToPose
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
 
 from explore_lite_msgs.msg import ExploreStatus
@@ -82,9 +88,8 @@ class StuckRecovery(Node):
         # Topics and frames
         self.cmd_vel_topic = p('cmd_vel_topic', '/cmd_vel').value
         self.odom_topic = p('odom_topic', '/odom').value
-        self.bumper_topic = p('bumper_topic', '/bumper').value
-        self.bumper_type = p('bumper_type', 'contacts').value  # contacts | bool | none
-        self.bumper_ignore = list(p('bumper_ignore', ['ground_plane']).value)
+        self.tof_topic = p('tof_topic', '/front_tof').value
+        self.tof_too_close_m = p('tof_too_close_m', 0.0).value      # m; <= 0: use range_max
         self.map_frame = p('map_frame', 'map').value
         self.base_frame = p('base_frame', 'base_footprint').value
         self.nav_action = p('navigate_action', 'navigate_to_pose').value
@@ -110,7 +115,7 @@ class StuckRecovery(Node):
         self.cmd_since = None          # Time since when we are commanded to move
         self.last_cmd_time = None
         self.odom_samples = deque()    # (Time received, x, y) of visual odometry
-        self.last_bumper_time = None
+        self.too_close = None          # (Time, distance m) of the latest too-close ToF reading
         self.explore_status = None
         self.paused_explore = False
 
@@ -121,7 +126,7 @@ class StuckRecovery(Node):
         status_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE,
                                 durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(ExploreStatus, '/explore/status', self.on_status, status_qos)
-        self.setup_bumper()
+        self.create_subscription(LaserScan, self.tof_topic, self.on_tof, 10)
 
         self.nav_client = ActionClient(self, NavigateToPose, self.nav_action)
         self.tf_buffer = tf2_ros.Buffer()
@@ -129,34 +134,20 @@ class StuckRecovery(Node):
 
         self.create_timer(0.1, self.tick)  # 10 Hz: detection and recovery motion
         self.get_logger().info(
-            f'Watching for a stuck robot: bumper {self.bumper_topic} ({self.bumper_type}), '
+            f'Watching for a stuck robot: {self.tof_topic} sees something, '
             f'or {self.cmd_vel_topic} > {self.min_cmd_speed} m/s for {self.stuck_time} s '
             f'with {self.odom_topic} moving < {self.min_progress} m')
 
     # ---------- inputs ----------
 
-    def setup_bumper(self):
-        if self.bumper_type == 'contacts':
-            # Imported here so the node also runs without ros_gz_interfaces.
-            from ros_gz_interfaces.msg import Contacts
-            self.create_subscription(Contacts, self.bumper_topic, self.on_contacts, 10)
-        elif self.bumper_type == 'bool':
-            self.create_subscription(Bool, self.bumper_topic, self.on_bumper_bool, 10)
-        elif self.bumper_type != 'none':
-            self.get_logger().error(
-                f'Unknown bumper_type "{self.bumper_type}" (use contacts, bool or none); '
-                f'bumper disabled.')
-
-    def on_contacts(self, msg):
-        for contact in msg.contacts:
-            names = contact.collision1.name + ' ' + contact.collision2.name
-            if not any(ignored and ignored in names for ignored in self.bumper_ignore):
-                self.last_bumper_time = self.now()
-                return
-
-    def on_bumper_bool(self, msg):
-        if msg.data:
-            self.last_bumper_time = self.now()
+    def on_tof(self, msg):
+        if self.phase != IDLE:
+            return  # recovering or cooling down: do not re-fire on the same obstacle
+        limit = self.tof_too_close_m if self.tof_too_close_m > 0.0 else msg.range_max
+        valid = [r for r in msg.ranges
+                 if math.isfinite(r) and r >= msg.range_min and r < limit]
+        if valid:
+            self.too_close = (self.now(), min(valid))
 
     def on_cmd_vel(self, msg):
         if self.phase != IDLE:
@@ -237,13 +228,14 @@ class StuckRecovery(Node):
     def tick(self):
         now = self.now()
         if self.phase == IDLE:
-            bumped = (self.last_bumper_time is not None and
-                      now - self.last_bumper_time < Duration(seconds=0.5))
+            too_close = (self.too_close is not None and
+                         now - self.too_close[0] < Duration(seconds=0.5))
             stuck, reason = self.pushing_without_moving(now)
-            if bumped:
-                self.start_recovery('bumper touched something')
+            if too_close:
+                cm = self.too_close[1] * 100.0
+                self.start_recovery('[TOO CLOSE]', f'Something is {cm:.0f} cm in front of the robot')
             elif stuck:
-                self.start_recovery(reason)
+                self.start_recovery('[STUCK]', f'Robot {reason}')
         elif self.phase == PREEMPT:
             if now >= self.phase_end:
                 if self.exploring():
@@ -274,20 +266,21 @@ class StuckRecovery(Node):
         elif self.phase == COOLDOWN:
             if now >= self.phase_end:
                 self.cmd_since = None
-                self.last_bumper_time = None
+                self.too_close = None
                 self.phase = IDLE
 
     def enter(self, phase, seconds):
         self.phase = phase
         self.phase_end = self.now() + Duration(seconds=seconds)
 
-    def start_recovery(self, reason):
+    def start_recovery(self, tag, what):
         pose = self.robot_pose()
         where = (f'({pose.pose.position.x:.2f}, {pose.pose.position.y:.2f})'
                  if pose is not None else '(position unknown)')
         self.get_logger().warn(
-            f'[STUCK] Robot {reason} at {where}: backing up and choosing another frontier')
+            f'{tag} {what} at {where}: backing up and choosing another frontier')
         self.cmd_since = None
+        self.too_close = None
         # (a) Replace explore_lite's goal with ours so Nav2 aborts it -> blacklisted.
         if pose is not None and self.nav_client.server_is_ready():
             goal = NavigateToPose.Goal()
