@@ -219,6 +219,1397 @@
           <specular>0.08 0.08 0.08 1</specular>
         </material>
       </visual>
+      <!-- ===== Visual-only detail for stereo SLAM (no collisions; navigable geometry unchanged) =====
+           Thin textured panels on every room-facing wall surface (distinct pattern per room),
+           textured floor tiles per room, and unique posters as loop-closure landmarks.
+           Gazebo Sim box faces map the whole texture once, so surfaces are split into ~2 m pieces
+           to keep the pattern at real-world scale (~4-5 mm per texel). -->
+      <visual name="panel_living_S_01">
+        <pose>1.053 3.578 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.798 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_living_S_02">
+        <pose>2.851 3.578 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.798 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_living_S_03">
+        <pose>5.3355 3.578 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.171 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_living_N_04">
+        <pose>1.1152 7.847 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.9223 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_living_N_05">
+        <pose>3.0375 7.847 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.9223 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_living_N_06">
+        <pose>4.9598 7.847 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.9223 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_living_W_07">
+        <pose>0.153 4.2902 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.4223 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_living_W_08">
+        <pose>0.153 5.7125 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.4223 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_living_W_09">
+        <pose>0.153 7.1348 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.4223 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_living_E_10">
+        <pose>5.922 4.3145 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.471 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_living_E_11">
+        <pose>5.922 7.248 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.196 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_living.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_living_00">
+        <pose>1.1125 4.2875 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.925 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_living_01">
+        <pose>1.1125 5.7125 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.925 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_living_02">
+        <pose>1.1125 7.1375 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.925 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_living_10">
+        <pose>3.0375 4.2875 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.925 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_living_11">
+        <pose>3.0375 5.7125 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.925 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_living_12">
+        <pose>3.0375 7.1375 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.925 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_living_20">
+        <pose>4.9625 4.2875 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.925 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_living_21">
+        <pose>4.9625 5.7125 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.925 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_living_22">
+        <pose>4.9625 7.1375 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.925 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_kitchen_S_12">
+        <pose>7.0207 3.578 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.8835 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_kitchen.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_kitchen_S_13">
+        <pose>8.9043 3.578 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.8835 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_kitchen.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_kitchen_N_14">
+        <pose>7.0207 7.847 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.8835 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_kitchen.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_kitchen_N_15">
+        <pose>8.9043 7.847 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.8835 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_kitchen.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_kitchen_W_16">
+        <pose>6.078 4.3145 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.471 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_kitchen.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_kitchen_W_17">
+        <pose>6.078 7.248 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.196 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_kitchen.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_kitchen_E_18">
+        <pose>9.847 4.2902 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.4223 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_kitchen.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_kitchen_E_19">
+        <pose>9.847 5.7125 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.4223 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_kitchen.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_kitchen_E_20">
+        <pose>9.847 7.1348 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.4223 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_kitchen.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_kitchen_00">
+        <pose>7.0187 4.2875 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.8875 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_tile.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_kitchen_01">
+        <pose>7.0187 5.7125 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.8875 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_tile.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_kitchen_02">
+        <pose>7.0187 7.1375 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.8875 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_tile.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_kitchen_10">
+        <pose>8.9062 4.2875 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.8875 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_tile.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_kitchen_11">
+        <pose>8.9062 5.7125 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.8875 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_tile.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_kitchen_12">
+        <pose>8.9062 7.1375 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.8875 1.425 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_tile.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_hallway_S_21">
+        <pose>3.4145 0.153 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.671 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_hallway.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_hallway_S_22">
+        <pose>5.0855 0.153 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.671 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_hallway.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_hallway_N_23">
+        <pose>3.1645 3.422 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.171 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_hallway.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_hallway_N_24">
+        <pose>5.3355 3.422 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.171 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_hallway.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_hallway_W_25">
+        <pose>2.578 0.602 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 0.896 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_hallway.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_hallway_W_26">
+        <pose>2.578 2.6855 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.471 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_hallway.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_hallway_E_27">
+        <pose>5.922 0.702 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.096 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_hallway.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_hallway_E_28">
+        <pose>5.922 2.8355 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.171 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_hallway.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_hallway_00">
+        <pose>3.4125 0.9688 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.675 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_dark.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_hallway_01">
+        <pose>3.4125 2.6062 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.675 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_dark.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_hallway_10">
+        <pose>5.0875 0.9688 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.675 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_dark.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_hallway_11">
+        <pose>5.0875 2.6062 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.675 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_dark.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bedroom_S_29">
+        <pose>7.0207 0.153 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.8835 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bedroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bedroom_S_30">
+        <pose>8.9043 0.153 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.8835 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bedroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bedroom_N_31">
+        <pose>7.0207 3.422 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.8835 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bedroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bedroom_N_32">
+        <pose>8.9043 3.422 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.8835 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bedroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bedroom_W_33">
+        <pose>6.078 0.702 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.096 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bedroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bedroom_W_34">
+        <pose>6.078 2.8355 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.171 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bedroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bedroom_E_35">
+        <pose>9.847 0.9708 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.6335 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bedroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bedroom_E_36">
+        <pose>9.847 2.6042 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.6335 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bedroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_bedroom_00">
+        <pose>7.0187 0.9688 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.8875 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_bedroom_01">
+        <pose>7.0187 2.6062 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.8875 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_bedroom_10">
+        <pose>8.9062 0.9688 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.8875 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_bedroom_11">
+        <pose>8.9062 2.6062 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.8875 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_wood_light.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bathroom_S_37">
+        <pose>0.7208 0.153 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.1335 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bathroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bathroom_S_38">
+        <pose>1.8542 0.153 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.1335 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bathroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bathroom_N_39">
+        <pose>0.7208 3.422 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.1335 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bathroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bathroom_N_40">
+        <pose>1.8542 3.422 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>1.1335 0.004 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bathroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bathroom_W_41">
+        <pose>0.153 0.9708 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.6335 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bathroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bathroom_W_42">
+        <pose>0.153 2.6042 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.6335 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bathroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bathroom_E_43">
+        <pose>2.422 0.602 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 0.896 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bathroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="panel_bathroom_E_44">
+        <pose>2.422 2.6855 1.249 0 0 0</pose>
+        <geometry>
+          <box><size>0.004 1.471 2.49</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/wall_bathroom.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_bathroom_00">
+        <pose>0.7188 0.9688 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.1375 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_tile.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_bathroom_01">
+        <pose>0.7188 2.6062 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.1375 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_tile.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_bathroom_10">
+        <pose>1.8562 0.9688 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.1375 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_tile.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="floor_bathroom_11">
+        <pose>1.8562 2.6062 0.003 0 0 0</pose>
+        <geometry>
+          <box><size>1.1375 1.6375 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/floor_tile.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="poster_living_west">
+        <pose>0.161 5.3 0.85 0 0 0</pose>
+        <geometry>
+          <box><size>0.01 0.6 0.75</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/poster_1.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="poster_living_south">
+        <pose>1.6 3.586 0.85 0 0 0</pose>
+        <geometry>
+          <box><size>0.6 0.01 0.75</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/poster_2.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="poster_kitchen_north">
+        <pose>7.4 7.839 0.85 0 0 0</pose>
+        <geometry>
+          <box><size>0.6 0.01 0.75</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/poster_3.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="poster_hallway_south">
+        <pose>4.25 0.161 0.85 0 0 0</pose>
+        <geometry>
+          <box><size>0.6 0.01 0.75</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/poster_4.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="poster_bedroom_north">
+        <pose>8 3.414 0.85 0 0 0</pose>
+        <geometry>
+          <box><size>0.6 0.01 0.75</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/poster_5.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <visual name="poster_bathroom_south">
+        <pose>1.3 0.161 0.85 0 0 0</pose>
+        <geometry>
+          <box><size>0.6 0.01 0.75</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.05 0.05 0.05 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://apartment_walls/materials/textures/poster_6.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
     </link>
   </model>
 </sdf>

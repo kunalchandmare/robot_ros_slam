@@ -1,18 +1,270 @@
 <?xml version="1.0" ?>
 <sdf version="1.7">
   <world name="apartment">
+    <!-- gz sim system plugins. Declaring any world plugin disables Gazebo's default set,
+         so Physics, UserCommands and SceneBroadcaster are listed explicitly. Sensors (ogre)
+         renders the stereo cameras; Imu makes the IMU publish. Fortress (ign-gazebo 6) names;
+         on Garden/Harmonic the equivalents are gz-sim-*-system / gz::sim::systems::*.
+         (STEREO_DESIGN.md section 8.) -->
+    <plugin filename="ignition-gazebo-physics-system" name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-user-commands-system" name="ignition::gazebo::systems::UserCommands"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system" name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <!-- Sensors use Ogre 1 ("ogre"), not Ogre 2. On WSL with the d3d12 GPU driver,
+         Ogre 2 crashes Gazebo when the cameras start (GL3PlusTextureGpu::copyTo
+         is not implemented there), while Ogre 1 works. The launcher's
+         render-engine option also defaults to ogre to match. On a native
+         Linux GPU, ogre2 also works. -->
+    <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
+      <render_engine>ogre</render_engine>
+    </plugin>
+    <plugin filename="ignition-gazebo-imu-system" name="ignition::gazebo::systems::Imu"/>
     <gravity>0 0 -9.81</gravity>
     <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
     <atmosphere type="adiabatic"/>
 
+    <!-- Physics: 4 ms steps at 250 Hz (0.004 x 250 = 1.0, so the target
+         real_time_factor stays at 1). That's 4x fewer physics steps than the
+         old 1 ms / 1000 Hz, so the sim can keep up with real time even with
+         stereo cameras rendering. A 4 ms step is plenty for a slow indoor
+         wheeled robot on a flat floor. -->
     <physics name="default_physics" default="true" type="ode">
-      <max_step_size>0.001</max_step_size>
+      <max_step_size>0.004</max_step_size>
       <real_time_factor>1</real_time_factor>
-      <real_time_update_rate>1000</real_time_update_rate>
+      <real_time_update_rate>250</real_time_update_rate>
     </physics>
 
+    <!-- Gazebo Sim GUI (Fortress / ign-gazebo 6). A <gui> block in the world
+         replaces Fortress's default GUI layout, so this mirrors the stock
+         gui.config of ign-gazebo 6 plugin by plugin. The only intended change
+         is the starting camera: a fixed overview of the whole flat. -->
+    <gui fullscreen="0">
+
+      <!-- 3D view. Camera sits 2 m south of the flat (x=5, y=-2), 8.5 m up,
+           facing north (yaw pi/2) and tilted down 1.0 rad (about 57 deg),
+           aimed at the middle of the flat (5, 4). The Fortress GUI camera's
+           default horizontal field of view is about 90 deg (measured here),
+           so the whole 10 m x 8 m flat, wall tops included, fills about
+           80 % of the view, for any window shape from portrait to 16:9. -->
+      <plugin filename="MinimalScene" name="3D View">
+        <ignition-gui>
+          <title>3D View</title>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+        <!-- Ogre 1 here too, same WSL d3d12 reason as the Sensors system above. -->
+        <engine>ogre</engine>
+        <scene>scene</scene>
+        <ambient_light>0.5 0.5 0.5</ambient_light>
+        <background_color>0.7 0.75 0.8</background_color>
+        <camera_pose>5 -2 8.5 0 1.0 1.5708</camera_pose>
+      </plugin>
+
+      <!-- Helpers that add features to the 3D view: right-click menu,
+           keeping the scene in sync with the simulation, mouse orbit / pan /
+           zoom, follow and move-to, markers, selection, spawning, and the
+           View menu options (collisions, inertia, ...). -->
+      <plugin filename="EntityContextMenuPlugin" name="Entity context menu">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="width" type="double">5</property>
+          <property key="height" type="double">5</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+        </ignition-gui>
+      </plugin>
+      <plugin filename="GzSceneManager" name="Scene Manager">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="width" type="double">5</property>
+          <property key="height" type="double">5</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+        </ignition-gui>
+      </plugin>
+      <plugin filename="InteractiveViewControl" name="Interactive view control">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="width" type="double">5</property>
+          <property key="height" type="double">5</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+        </ignition-gui>
+      </plugin>
+      <!-- Camera Tracking handles "Follow" and "Move to" from the entity tree.
+           It has no follow settings of its own in Fortress. The follow
+           distance can be changed while running through the
+           /gui/follow/offset service (ignition.msgs.Vector3d). -->
+      <plugin filename="CameraTracking" name="Camera Tracking">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="width" type="double">5</property>
+          <property key="height" type="double">5</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+        </ignition-gui>
+      </plugin>
+      <plugin filename="MarkerManager" name="Marker manager">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="width" type="double">5</property>
+          <property key="height" type="double">5</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+        </ignition-gui>
+      </plugin>
+      <plugin filename="SelectEntities" name="Select Entities">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="width" type="double">5</property>
+          <property key="height" type="double">5</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+        </ignition-gui>
+      </plugin>
+      <plugin filename="Spawn" name="Spawn Entities">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="width" type="double">5</property>
+          <property key="height" type="double">5</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+        </ignition-gui>
+      </plugin>
+      <plugin filename="VisualizationCapabilities" name="Visualization Capabilities">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="width" type="double">5</property>
+          <property key="height" type="double">5</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+        </ignition-gui>
+      </plugin>
+
+      <!-- Play / pause / step (bottom left). Starts paused, as by default. -->
+      <plugin filename="WorldControl" name="World control">
+        <ignition-gui>
+          <title>World control</title>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="height">72</property>
+          <property type="double" key="width">121</property>
+          <property type="double" key="z">1</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View">
+            <line own="left" target="left"/>
+            <line own="bottom" target="bottom"/>
+          </anchors>
+        </ignition-gui>
+        <play_pause>true</play_pause>
+        <step>true</step>
+        <start_paused>true</start_paused>
+        <use_event>true</use_event>
+      </plugin>
+
+      <!-- Sim time, real time, real-time factor, iterations (bottom right). -->
+      <plugin filename="WorldStats" name="World stats">
+        <ignition-gui>
+          <title>World stats</title>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="height">110</property>
+          <property type="double" key="width">290</property>
+          <property type="double" key="z">1</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View">
+            <line own="right" target="right"/>
+            <line own="bottom" target="bottom"/>
+          </anchors>
+        </ignition-gui>
+        <sim_time>true</sim_time>
+        <real_time>true</real_time>
+        <real_time_factor>true</real_time_factor>
+        <iterations>true</iterations>
+      </plugin>
+
+      <!-- Top-left toolbar: insert shapes and lights, move / rotate,
+           screenshot, copy / paste. -->
+      <plugin filename="Shapes" name="Shapes">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="x" type="double">0</property>
+          <property key="y" type="double">0</property>
+          <property key="width" type="double">250</property>
+          <property key="height" type="double">50</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+          <property key="cardBackground" type="string">#666666</property>
+        </ignition-gui>
+      </plugin>
+      <plugin filename="Lights" name="Lights">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="x" type="double">250</property>
+          <property key="y" type="double">0</property>
+          <property key="width" type="double">150</property>
+          <property key="height" type="double">50</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+          <property key="cardBackground" type="string">#666666</property>
+        </ignition-gui>
+      </plugin>
+      <plugin filename="TransformControl" name="Transform control">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="x" type="double">0</property>
+          <property key="y" type="double">50</property>
+          <property key="width" type="double">250</property>
+          <property key="height" type="double">50</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+          <property key="cardBackground" type="string">#777777</property>
+        </ignition-gui>
+        <!-- Work with MinimalScene, not the legacy GzScene3D. -->
+        <legacy>false</legacy>
+      </plugin>
+      <plugin filename="Screenshot" name="Screenshot">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="x" type="double">250</property>
+          <property key="y" type="double">50</property>
+          <property key="width" type="double">50</property>
+          <property key="height" type="double">50</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+          <property key="cardBackground" type="string">#777777</property>
+        </ignition-gui>
+      </plugin>
+      <plugin filename="CopyPaste" name="CopyPaste">
+        <ignition-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="x" type="double">300</property>
+          <property key="y" type="double">50</property>
+          <property key="width" type="double">100</property>
+          <property key="height" type="double">50</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+          <property key="cardBackground" type="string">#777777</property>
+        </ignition-gui>
+      </plugin>
+
+      <!-- Right-hand side panels: properties of the selected entity, and
+           the list of everything in the world. -->
+      <plugin filename="ComponentInspector" name="Component inspector">
+        <ignition-gui>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+      </plugin>
+      <plugin filename="EntityTree" name="Entity tree">
+        <ignition-gui>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="string" key="state">docked</property>
+        </ignition-gui>
+      </plugin>
+    </gui>
+
     <scene>
-      <ambient>0.4 0.4 0.4 1</ambient>
+      <ambient>0.5 0.5 0.5 1</ambient>
       <background>0.7 0.75 0.8 1</background>
       <shadows>true</shadows>
     </scene>
@@ -29,6 +281,33 @@
         <quadratic>0.001</quadratic>
       </attenuation>
       <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Two soft ceiling lights (no shadows, cheap) so wall shadows from the
+         sun don't leave the roofless rooms too dark for stereo matching. -->
+    <light name="ceiling_light_north" type="point">
+      <cast_shadows>false</cast_shadows>
+      <pose>4.0 5.7 2.4 0 0 0</pose>
+      <diffuse>0.5 0.5 0.48 1</diffuse>
+      <specular>0.05 0.05 0.05 1</specular>
+      <attenuation>
+        <range>8</range>
+        <constant>0.6</constant>
+        <linear>0.08</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+    <light name="ceiling_light_south" type="point">
+      <cast_shadows>false</cast_shadows>
+      <pose>5.0 1.8 2.4 0 0 0</pose>
+      <diffuse>0.5 0.5 0.48 1</diffuse>
+      <specular>0.05 0.05 0.05 1</specular>
+      <attenuation>
+        <range>8</range>
+        <constant>0.6</constant>
+        <linear>0.08</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
     </light>
 
     <model name="ground_plane">

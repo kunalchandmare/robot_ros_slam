@@ -19,12 +19,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # RTAB-Map (main packages)
     ros-humble-rtabmap \
     ros-humble-rtabmap-ros \
-    ros-humble-rtabmap-demos \
-    ros-humble-rtabmap-examples \
+    # ros-humble-rtabmap-demos \      (unused, slows rebuilds)
+    # ros-humble-rtabmap-examples \   (unused, slows rebuilds)
     # Navigation & simulation (optional but useful)
-    ros-humble-nav2-bringup \
-    ros-humble-turtlebot3* \
+    # ros-humble-nav2-bringup \       (unused for now, slows rebuilds)
+    # ros-humble-turtlebot3* \        (unused, very large, slows rebuilds)
     ros-humble-ros-gz \
+    # Visualization and teleop (base image is ros:humble-ros-base, not desktop)
+    ros-humble-rviz2 \
+    ros-humble-teleop-twist-keyboard \
+    xterm \
     # GUI / Qt dependencies (helps with RViz / rtabmap_viz)
     libqt5gui5 \
     libxcb-xinerama0 \
@@ -33,8 +37,43 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-dri \
     && rm -rf /var/lib/apt/lists/*
 
+# Small extras go in their own step, so adding one later does not
+# re-download everything above (Docker caches each RUN step separately).
+# mesa-utils: provides glxinfo; "glxinfo -B" shows which GPU OpenGL uses.
+# ros-humble-rqt-robot-steering: slider window to drive the robot (/cmd_vel)
+#   without needing keyboard focus on a teleop terminal.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    mesa-utils \
+    ros-humble-rqt-robot-steering \
+    && rm -rf /var/lib/apt/lists/*
+
+# Navigation (Nav2) for autonomous frontier exploration (launch with explore:=true).
+# Its own step, so the big step above stays cached.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-navigation2 \
+    ros-humble-nav2-bringup \
+    && rm -rf /var/lib/apt/lists/*
+
+# tf2 0.25.23 has a deadlock (ros2/geometry2 PR #990, fixed in 0.25.24) that freezes the
+# TF listener inside Nav2's controller_server/planner_server, so Nav2 plans but never
+# drives. The base image ships its own tf2, so upgrade it explicitly. This step never
+# fails the build; the version it ends up with is printed in the build log.
+RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade \
+    ros-humble-tf2 ros-humble-tf2-ros ros-humble-tf2-ros-py ros-humble-tf2-msgs \
+    ros-humble-tf2-py ros-humble-tf2-geometry-msgs ros-humble-tf2-eigen \
+    || echo "tf2 upgrade failed (network); Nav2 may not drive if tf2 is 0.25.23"; \
+    dpkg-query -W ros-humble-tf2 ros-humble-tf2-ros || true; \
+    rm -rf /var/lib/apt/lists/*
+
+# explore_lite (frontier exploration) has no apt package for Humble. Its source comes in
+# as a git submodule at src/third_party/m-explore-ros2 (cloned on the host, so no network
+# access is needed here) and is built by the normal "colcon build" of the workspace.
+# colcon_defaults.yaml (repo root) skips the unused multirobot_map_merge package.
+ENV COLCON_DEFAULTS_FILE=/workspaces/ros2-dev/colcon_defaults.yaml
+
 # Initialize rosdep (optional but recommended)
-RUN rosdep update
+# Must not break the build on networks that block HTTPS from containers.
+RUN rosdep update || echo "rosdep update failed (network); skipping, not needed for building"
 
 # Auto-source ROS and workspace
 RUN echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc && \

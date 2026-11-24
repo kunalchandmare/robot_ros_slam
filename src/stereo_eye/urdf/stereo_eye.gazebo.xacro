@@ -1,19 +1,41 @@
 <?xml version="1.0"?>
-<!-- Gazebo Harmonic (gz-sim 8, SDF 1.10) plugins and sensors for Stereo Eye.
-     Included from stereo_eye.urdf.xacro (shares its properties). -->
+<!-- gz sim plugins and sensors for Stereo Eye. Included from stereo_eye.urdf.xacro (shares its properties).
+
+     Target: ROS 2 Humble + ros-humble-ros-gz (apt), which is built against Gazebo FORTRESS
+     (ign-gazebo 6). The same tags also work on Gazebo Harmonic (gz-sim 8, ros-humble-ros-gzharmonic):
+       * plugin filenames "gz-sim-*" are mapped to "ignition-gazebo-*" by Fortress's SystemLoader,
+         and Fortress registers the "gz::sim::systems::*" plugin-name aliases;
+       * sensor frame ids: every sensor sets BOTH tags to the same frame:
+           <ignition_frame_id>  read by ign-sensors 6.2.0+ (Fortress), preferred there;
+           <gz_frame_id>        read by gz-sensors 7/8 (Garden/Harmonic), and by ign-sensors 6.8.0+ only as a fallback.
+         ign-sensors 6.8.0+ logs a harmless "Found both ... Only ignition_frame_id will be used" warning.
+         ign-sensors 6.0.x-6.1.0 (Ubuntu jammy universe) reads neither: frame_id = sensor name. Use 6.2.0+
+         (packages.ros.org ships 6.9.0 for Humble).
+       * <camera_info_topic> and <lens><intrinsics>/<projection> are SDFormat 1.7+ (sdformat12 / 14).
+     This is NOT Gazebo Classic: no libgazebo_ros_camera / multicamera / hack_baseline here. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <!-- == Stereo camera macro: one gz camera sensor per eye == -->
-  <!-- tx = -fx * baseline for the RIGHT camera so camera_info P[3] encodes the baseline
-       (RTAB-Map / stereo_image_proc need it). -->
-  <xacro:macro name="gz_stereo_eye" params="side tx">
+  <!-- == Stereo pair: two identical gz camera sensors on the rigid stereo bar == -->
+  <!-- gz sim has no "multicamera" sensor. Synchronisation comes from both sensors having the same
+       <update_rate>: the Sensors system renders them in the same sim step, so left/right images carry
+       identical header stamps (sim time).
+       Baseline in camera_info (right P[3] = -fx * baseline), two independent mechanisms:
+         1. gz-sim's Sensors system (ign-gazebo 6.0+ and gz-sim 8) calls SetBaseline() on the second camera
+            that shares a parent link with another camera, using the Y offset between them and the topic
+            names ("left"/"right") to pick the right camera. After URDF fixed-joint lumping both sensors
+            sit on base_link at y = +/-baseline/2, so this sets P[3] on every Fortress/Harmonic version.
+         2. <lens><projection><tx> is copied into P[3] by ign-sensors 6.7.0+ / gz-sensors 8 (ignored by
+            ign-sensors <= 6.6). It is set to the same value, so both paths agree.
+       ros_gz_bridge copies P unchanged. Left camera tx = 0 (ROS stereo convention). -->
+  <xacro:macro name="gz_stereo_camera" params="side tx">
     <gazebo reference="camera_${side}_link">
       <sensor name="stereo_${side}" type="camera">
         <always_on>true</always_on>
         <update_rate>${cam_fps}</update_rate>
         <visualize>false</visualize>
         <topic>stereo/${side}/image_raw</topic>
-        <gz_frame_id>camera_${side}_optical_frame</gz_frame_id>
+        <ignition_frame_id>camera_${side}_optical_frame</ignition_frame_id>  <!-- Fortress (ign-sensors 6.2+) -->
+        <gz_frame_id>camera_${side}_optical_frame</gz_frame_id>              <!-- Garden/Harmonic (+ Fortress 6.8+ fallback) -->
         <camera name="stereo_${side}">
           <camera_info_topic>stereo/${side}/camera_info</camera_info_topic>
           <horizontal_fov>${cam_hfov}</horizontal_fov>
@@ -23,27 +45,28 @@
             <format>R8G8B8</format>
           </image>
           <clip>
-            <near>0.05</near>
-            <far>40.0</far>
+            <near>${cam_near}</near>
+            <far>${cam_far}</far>
           </clip>
           <noise>
             <type>gaussian</type>
             <mean>0.0</mean>
             <stddev>0.005</stddev>
           </noise>
+          <!-- No <distortion>: images are ideal pinhole, i.e. already rectified (R = identity). -->
           <lens>
             <intrinsics>
               <fx>${cam_fx}</fx>
               <fy>${cam_fx}</fy>
-              <cx>${cam_w/2.0}</cx>
-              <cy>${cam_h/2.0}</cy>
+              <cx>${cam_cx}</cx>
+              <cy>${cam_cy}</cy>
               <s>0</s>
             </intrinsics>
             <projection>
               <p_fx>${cam_fx}</p_fx>
               <p_fy>${cam_fx}</p_fy>
-              <p_cx>${cam_w/2.0}</p_cx>
-              <p_cy>${cam_h/2.0}</p_cy>
+              <p_cx>${cam_cx}</p_cx>
+              <p_cy>${cam_cy}</p_cy>
               <tx>${tx}</tx>
               <ty>0</ty>
             </projection>
@@ -53,8 +76,8 @@
     </gazebo>
   </xacro:macro>
 
-  <xacro:gz_stereo_eye side="left"  tx="0.0"/>
-  <xacro:gz_stereo_eye side="right" tx="${-cam_fx*stereo_baseline}"/>
+  <xacro:gz_stereo_camera side="left"  tx="0.0"/>
+  <xacro:gz_stereo_camera side="right" tx="${cam_tx_right}"/>
 
   <!-- == IMU == -->
   <gazebo reference="imu_link">
@@ -63,7 +86,8 @@
       <update_rate>100</update_rate>
       <visualize>false</visualize>
       <topic>imu</topic>
-      <gz_frame_id>imu_link</gz_frame_id>
+      <ignition_frame_id>imu_link</ignition_frame_id>  <!-- Fortress (ign-sensors 6.2+) -->
+      <gz_frame_id>imu_link</gz_frame_id>              <!-- Garden/Harmonic (+ Fortress 6.8+ fallback) -->
       <imu>
         <angular_velocity>
           <x><noise type="gaussian"><mean>0</mean><stddev>0.0009</stddev></noise></x>
@@ -79,6 +103,52 @@
     </sensor>
   </gazebo>
 
+  <!-- == Front ToF (gpu_lidar) == -->
+  <!-- Fortress ign-sensors6 GpuLidarSensor: Lidar::Load advertises
+       ignition.msgs.LaserScan on the sensor topic, then GpuLidarSensor::Load
+       advertises ignition.msgs.PointCloudPacked on <topic>/points.
+       The Sensors system (already in apartment.sdf, render_engine ogre) drives
+       this; the Contact system is not used. Topic is set at sensor level
+       (unlike the old contact sensor).
+
+       Range min is 0.01 m, max 1.0 m. Lidar::Clamp promotes any finite value
+       below min up to range_min, so a 0.0 empty pixel looks like a hit at
+       min. The 21 x 3 sample pattern (50 deg H, +/- 1 deg V) keeps the old
+       2.5 deg horizontal step so a single bad ogre1 second-pass pixel is
+       less likely to pin the whole scan at range_min. Geometry of this
+       link is entirely behind the sensor origin (see stereo_eye.urdf.xacro). -->
+  <gazebo reference="front_tof_link">
+    <sensor name="front_tof" type="gpu_lidar">
+      <always_on>true</always_on>
+      <update_rate>${tof_fps}</update_rate>
+      <visualize>false</visualize>
+      <topic>/front_tof</topic>
+      <ignition_frame_id>front_tof_link</ignition_frame_id>  <!-- Fortress (ign-sensors 6.2+) -->
+      <gz_frame_id>front_tof_link</gz_frame_id>              <!-- Garden/Harmonic (+ Fortress 6.8+ fallback) -->
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>${tof_h_samples}</samples>
+            <resolution>1</resolution>
+            <min_angle>${-tof_hfov/2}</min_angle>
+            <max_angle>${tof_hfov/2}</max_angle>
+          </horizontal>
+          <vertical>
+            <samples>${tof_v_samples}</samples>
+            <resolution>1</resolution>
+            <min_angle>${-tof_vfov/2}</min_angle>
+            <max_angle>${tof_vfov/2}</max_angle>
+          </vertical>
+        </scan>
+        <range>
+          <min>${tof_min_range}</min>
+          <max>${tof_max_range}</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+    </sensor>
+  </gazebo>
+
   <!-- == Model plugins == -->
   <gazebo>
     <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
@@ -86,20 +156,28 @@
       <right_joint>right_wheel_joint</right_joint>
       <wheel_separation>${wheel_separation}</wheel_separation>
       <wheel_radius>${wheel_radius}</wheel_radius>
-      <max_linear_acceleration>1.0</max_linear_acceleration>
-      <min_linear_acceleration>-1.0</min_linear_acceleration>
-      <max_angular_acceleration>3.0</max_angular_acceleration>
-      <min_angular_acceleration>-3.0</min_angular_acceleration>
-      <max_linear_velocity>0.6</max_linear_velocity>
-      <min_linear_velocity>-0.6</min_linear_velocity>
-      <max_angular_velocity>2.0</max_angular_velocity>
-      <min_angular_velocity>-2.0</min_angular_velocity>
+      <!-- Limits (ign-gazebo6 DiffDrive.cc element names). These cap the *commanded*
+           twist, so a hard teleop key press cannot slam the robot into a tip-over.
+           Linear: walk-pace 0.3 m/s, 0.5 m/s^2 (the accel used in the support-polygon check).
+           Angular: 1.0 rad/s, 1.5 rad/s^2. -->
+      <max_linear_acceleration>0.5</max_linear_acceleration>
+      <min_linear_acceleration>-0.5</min_linear_acceleration>
+      <max_angular_acceleration>1.5</max_angular_acceleration>
+      <min_angular_acceleration>-1.5</min_angular_acceleration>
+      <max_linear_velocity>0.3</max_linear_velocity>
+      <min_linear_velocity>-0.3</min_linear_velocity>
+      <max_angular_velocity>1.0</max_angular_velocity>
+      <min_angular_velocity>-1.0</min_angular_velocity>
       <topic>cmd_vel</topic>
       <odom_topic>odom</odom_topic>
-      <tf_topic>tf</tf_topic>
+      <!-- Unique name so the launch package can bridge this as a wheel-odometry guess
+           without colliding with /tf. Relative name: ign-gazebo6 assigns it as-is
+           (not under /model/<name>/); gz-transport then publishes the absolute /wheel_tf.
+           odom is likewise published as /odom. frame_id / child_frame_id unchanged. -->
+      <tf_topic>wheel_tf</tf_topic>
       <frame_id>odom</frame_id>
       <child_frame_id>base_footprint</child_frame_id>
-      <odom_publish_frequency>30</odom_publish_frequency>
+      <odom_publish_frequency>50</odom_publish_frequency>
     </plugin>
 
     <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">

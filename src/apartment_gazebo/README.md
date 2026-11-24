@@ -1,15 +1,17 @@
 # apartment_gazebo
 
-A simple **10 m × 8 m** indoor apartment for mobile-robot navigation in
-Gazebo Classic and Gazebo Sim (Harmonic and other SDF 1.7 releases).
+A simple **10 m × 8 m** indoor apartment for mobile-robot navigation, made
+for ROS 2 Humble with Gazebo Fortress. It also loads in Garden and Harmonic,
+and in Gazebo Classic (geometry only).
 Outer walls are closed. Interior doorways are empty gaps (no door meshes),
 wide enough for a TurtleBot- or Husky-sized robot. A few static furniture
 boxes act as obstacles; doorways and corridors stay clear (≥ 0.8 m).
 
 The world file includes the wall model and each furniture model with
 `model://` URIs. After you build and source this package, the environment
-hook adds `share/apartment_gazebo/models` to `GZ_SIM_RESOURCE_PATH` and
-`GAZEBO_MODEL_PATH` so those URIs resolve.
+hook adds `share/apartment_gazebo/models` to `GZ_SIM_RESOURCE_PATH`,
+`IGN_GAZEBO_RESOURCE_PATH` (older Fortress releases) and `GAZEBO_MODEL_PATH`
+so those URIs (and the wall textures) resolve.
 
 ## The apartment
 
@@ -42,6 +44,60 @@ bathroom from the hallway.
 - **Bed** in the bedroom, against the south wall
 - **Vanity** in the north-west corner of the bathroom
 
+Each piece of furniture has a fine, high-contrast texture so a stereo
+camera can measure depth on it (plain one-colour boxes have nothing to
+match): blue tweed fabric with flecks on the sofa, walnut wood grain on
+the coffee table, speckled terrazzo on the kitchen counter, a cream quilted
+duvet with small coloured dots on the bed and grey-blue marble on the
+vanity. Only the look changed. Sizes, positions and collisions are exactly
+as before. Each texture is a small PNG image (about 450 KB for all five) in
+that model's `materials/textures/` folder.
+
+### Textured walls and floor (for camera SLAM)
+
+Plain one-colour walls give a stereo camera almost nothing to match, so
+every room now has its own look. These are visual-only details. They have
+no collisions, so walls, doorways and the spawn point haven't moved.
+
+- **Walls**: each room's walls are covered with thin textured panels
+  - Living room: red brick
+  - Kitchen: colourful subway tiles up to about 1.3 m, painted plaster above
+  - Hallway: blue striped wallpaper with small dots
+  - Bedroom: pale green leaf pattern
+  - Bathroom: blue ceramic tiles, with a few patterned ones
+  
+  All rooms except the bathroom have a baseboard along the bottom. The
+  panels are split into pieces about 2 m wide, so the patterns stay at
+  real-world size (bricks and tiles at centimetre to decimetre scale)
+  instead of one image stretched across a whole wall.
+- **Floors**: light wood planks in the living room and bedroom, dark wood
+  in the hallway, and stone tiles in the kitchen and bathroom.
+- **Posters**: six unique, colourful posters, one each in the bathroom,
+  hallway, bedroom and kitchen and two in the living room. Their centres
+  are at about 0.85 m, low enough for a small robot's cameras to see. They
+  act as landmarks that help the robot recognise a room it has seen before
+  (loop closure).
+- **Lighting**: the sun casts shadows, the scene ambient light is a little
+  brighter (0.5), and two soft ceiling lights without shadows keep the
+  roofless rooms from going dark.
+
+The textures are small PNG images (about 1.2 MB in total) in
+`models/apartment_walls/materials/textures/`. They're used through
+`<pbr><metal><albedo_map>`, which Gazebo Sim's renderers read.
+Gazebo Classic ignores them and shows plain colours instead.
+
+### Simulation systems (sensors)
+
+The world loads these Gazebo Sim systems: Physics, UserCommands,
+SceneBroadcaster, **Sensors** (Ogre 1 renderer, `ogre`) and **Imu**. Without the
+last two, robot cameras and IMUs don't publish anything. The plugin names
+are the Fortress (`ignition-gazebo-*`) names that ship with ROS 2 Humble.
+Garden and Harmonic still accept them, with a deprecation warning.
+The sensors and the GUI's 3D view use Ogre 1 because Ogre 2 crashes when the
+cameras start on WSL with the d3d12 GPU driver. On a native Linux GPU you can
+switch both back to `ogre2`. Gazebo
+Classic can't load these plugins, logs errors for them and skips them.
+
 ### Robot spawn
 
 Place the robot in the living room, clear of furniture and doorways:
@@ -55,43 +111,49 @@ yaw = 0.0 rad    # facing +X, toward the kitchen opening
 
 ## Build and launch
 
-Put this package in a ROS 2 workspace, then:
+This package lives in the `src/` folder of the ROS 2 Humble workspace at
+`/workspaces/ros2-dev` (the repo root is the workspace). Build it there:
 
 ```bash
-cd /path/to/ws
+cd /workspaces/ros2-dev
 colcon build --packages-select apartment_gazebo
 source install/setup.bash
 ```
 
 Sourcing the workspace is what applies the model-path hook. After that,
-launch the world with Gazebo Sim / Harmonic:
+launch the world with Gazebo Fortress (the version that comes with Humble):
+
+```bash
+ign gazebo $(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
+```
+
+Or through `ros_gz_sim` (on Humble this starts Fortress too):
+
+```bash
+ros2 launch ros_gz_sim gz_sim.launch.py gz_args:=$(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
+```
+
+On Gazebo Garden or Harmonic (not the Humble setup), use `gz sim` instead:
 
 ```bash
 gz sim $(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
 ```
 
-Or through `ros_gz_sim`:
+Gazebo Classic alternative (geometry only; also uses `GAZEBO_MODEL_PATH` from the hook):
 
 ```bash
-ros2 launch ros_gz_sim gz_sim.launch.py   gz_args:=$(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
-```
-
-Gazebo Classic alternative (also uses `GAZEBO_MODEL_PATH` from the hook):
-
-```bash
-gazebo $(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
-# or
 gazebo --verbose $(ros2 pkg prefix apartment_gazebo)/share/apartment_gazebo/worlds/apartment.sdf
 ```
 
-To spawn a robot at the suggested living-room pose with `ros_gz_sim`:
+To spawn a robot at the suggested living-room pose with `ros_gz_sim`
+(replace `<robot.sdf>` with your robot's SDF or URDF file):
 
 ```bash
-ros2 run ros_gz_sim create -file /path/to/robot.sdf -name robot   -x 4.00 -y 5.50 -z 0.05 -Y 0.0
+ros2 run ros_gz_sim create -file <robot.sdf> -name robot -x 4.00 -y 5.50 -z 0.05 -Y 0.0
 ```
 
 With `gazebo_ros` on Gazebo Classic:
 
 ```bash
-ros2 run gazebo_ros spawn_entity.py -entity robot -file /path/to/robot.sdf   -x 4.00 -y 5.50 -z 0.05 -Y 0.0
+ros2 run gazebo_ros spawn_entity.py -entity robot -file <robot.sdf> -x 4.00 -y 5.50 -z 0.05 -Y 0.0
 ```

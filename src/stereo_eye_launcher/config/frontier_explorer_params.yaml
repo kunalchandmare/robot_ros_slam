@@ -1,0 +1,84 @@
+# frontier_explorer_params.yaml - settings for our own exploration node
+# (scripts/frontier_explorer.py), used with: explore:=true explorer:=own
+#
+# The node replaces explore_lite and keeps its interfaces (/explore/status,
+# /explore/resume, navigate_to_pose), so explore_map_saver.py and
+# stuck_recovery.py work with either. With the default explorer:=explore_lite
+# this file is not read at all.
+#
+# Robot: 0.256 m wide, 0.213 m long, nearly round (see nav2_params.yaml).
+# Costmap values below are the PUBLISHED 0-100 scale of
+# /global_costmap/costmap: 0 free, 1-98 inflated, 99 inscribed, 100 wall,
+# -1 unknown. (Nav2's internal 0-254 cost c is published as 1 + 97*(c-1)/251.)
+# Every value can be tried with an offline test first:
+#   python3 src/stereo_eye_launcher/test/test_frontier_selection.py
+
+frontier_explorer:
+  ros__parameters:
+    use_sim_time: True
+    costmap_topic: /global_costmap/costmap  # full costmap every second (always_send_full_costmap)
+    robot_base_frame: base_footprint
+    navigate_action: navigate_to_pose
+    cmd_vel_topic: /cmd_vel                 # only for the look-around turn
+    escape_topic: /stuck_recovery/escape    # asks stuck_recovery.py for [ESCAPE]
+    visualize: true                         # markers on /explore/frontiers for RViz
+
+    # --- Where the robot can go (lesson: holes in mapped walls are not doors)
+    min_passage_width: 0.36      # (m) narrowest gap counted as a way through:
+                                 # robot 0.256 m + 5 cm per side. The robot
+                                 # centre must stay 0.18 m from every wall cell.
+    comfortable_clearance: 0.30  # (m) closer to a wall than this, a step on
+    narrow_penalty: 2.0          # the path counts (1 + narrow_penalty) times, so
+                                 # wide doorways win over barely-wide-enough gaps
+
+    # --- Frontiers and goals (lesson: never the centroid)
+    min_frontier_size: 0.30      # (m) shorter frontier pieces are ignored
+    approach_radius: 0.60        # (m) goal cell at most this far from the frontier
+    approach_max_cost: 50        # goal cell value below this (= Nav2 cost ~128,
+                                 # about 0.27 m or more from walls)
+    free_check_radius: 0.25      # (m) around the goal cell, at least
+    min_free_ratio: 0.6          # 60 % must be known free (no lonely free specks)
+
+    # --- Ranking (lesson: path length, not straight-line distance)
+    size_gain: 1.0               # score = path length - size_gain * frontier length
+    size_cap: 2.0                # (m) frontier length counted at most this much
+    start_search_radius: 0.8     # (m) robot on a non-drivable cell: start from the
+                                 # nearest drivable one within this radius
+    ignore_near_robot: 0.45      # (m) unknown patches completely this close to the
+                                 # robot (stereo blind zone ~0.35 m, cells under
+                                 # the robot) are not frontiers
+
+    # --- Commitment (lesson: do not hop between goals)
+    replan_period: 3.0           # (s) re-check frontiers this often while driving
+    progress_timeout: 30.0       # (s) give up a goal when the path to it did not
+    progress_min: 0.10           # get shorter by progress_min metres in this time
+    switch_margin: 1.5           # (m of score) switch only to a clearly better frontier
+    min_goal_distance: 0.25      # (m) a goal closer than this counts as "reached"
+
+    # --- Failures (lesson: blacklist areas, with backoff)
+    blacklist_radius: 0.5        # (m) area around a failed goal
+    blacklist_time: 60.0         # (s) first time; doubles on every repeat there
+    blacklist_max_failures: 3    # third failure in the same area = for good
+    visit_limit: 2               # reached this often and the frontier is still
+                                 # there (cannot be seen from there): blacklist
+
+    # --- Look around first (lesson: no goals from a tiny first view)
+    min_known_area_m2: 10.0      # turn on the spot until the costmap knows this much
+    look_around_speed: 0.3       # (rad/s) like explore_map_saver.py
+    look_around_angle: 6.28      # (rad) one full turn, about 21 s
+    look_around_settle: 2.0      # (s) standing still afterwards so rtabmap catches up
+    max_look_arounds: 2          # also used when no frontier is left but the map is small
+
+    # --- Escape (lesson: the controller can refuse to move)
+    escape_after_aborts: 2       # aborted goals in a row ...
+    escape_motion: 0.10          # (m) ... while the robot moved less than this
+    escape_cooldown: 30.0        # (s) at most one escape request per this time
+
+    # --- Optional geofence in the map frame (map origin = spawn pose).
+    # For the apartment with the default spawn (4.0, 5.5) the building is
+    # x -4.0..6.0, y -5.5..2.5. Off by default: it is wrong for other spawns.
+    geofence_enabled: false
+    geofence_xmin: -4.0
+    geofence_xmax: 6.0
+    geofence_ymin: -5.5
+    geofence_ymax: 2.5

@@ -16,9 +16,18 @@
           <box><size>0.6 2.4 0.9</size></box>
         </geometry>
         <material>
-          <ambient>0.7 0.7 0.68 1</ambient>
-          <diffuse>0.9 0.9 0.88 1</diffuse>
+          <!-- White base so the albedo texture shows its own colours
+               (Gazebo multiplies the texture by diffuse), same as the walls. -->
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
           <specular>0.1 0.1 0.1 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://kitchen_counter/materials/textures/counter_terrazzo.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.5</roughness>
+            </metal>
+          </pbr>
         </material>
       </visual>
     </link>

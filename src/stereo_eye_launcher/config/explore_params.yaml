@@ -1,0 +1,74 @@
+# explore_params.yaml - explore_lite (m-explore-ros2) settings for stereo_eye.
+#
+# Loaded by launch.py when explore:=true. The node is named explore_node
+# (the name explore_lite gives itself). It finds frontiers (edges between
+# known free space and unknown space) and sends the best one to Nav2's
+# navigate_to_pose action, again and again, until none are left. It then
+# publishes "exploration_complete" on /explore/status (transient local),
+# which explore_map_saver.py listens to.
+
+explore_node:
+  ros__parameters:
+    use_sim_time: True
+    robot_base_frame: base_footprint
+    # Frontiers are searched on Nav2's global costmap, which is rtabmap's /map
+    # plus inflation. It is used instead of /map directly because rtabmap only
+    # republishes a latched /map when the map changes, and explore_lite
+    # subscribes without "transient local", so it could wait forever for a
+    # first map while the robot stands still. The global costmap is
+    # republished every second (always_send_full_costmap in nav2_params.yaml).
+    costmap_topic: /global_costmap/costmap
+    costmap_updates_topic: /global_costmap/costmap_updates
+    visualize: true              # frontier markers on /explore/frontiers for RViz
+    # What this explore_lite version (m-explore-ros2 326cf8a, the submodule)
+    # really does, read from explore.cpp / frontier_search.cpp:
+    #   * Every 1/planner_frequency seconds it re-ranks all frontiers by
+    #       cost = potential_scale * distance_m * resolution
+    #              - gain_scale * length_m
+    #     (distance_m = straight-line distance from the robot to the
+    #     frontier's nearest cell; length_m = frontier size in cells *
+    #     resolution) and sends the cheapest one that is not blacklisted.
+    #     Note the extra "* resolution" on the distance term: halving the cell
+    #     size (0.05 -> 0.025 m in 3c5dc13) also halved the weight of distance,
+    #     so the robot started preferring big frontiers far away, crossing the
+    #     apartment back and forth.
+    #   * The goal is the frontier's centroid. If the best centroid moved by
+    #     more than 1 cm (the map grows all the time), it counts as a NEW goal
+    #     and is re-sent, which restarts Nav2. There is NO hysteresis or
+    #     "keep the current goal" option, and NO heading term: orientation_scale
+    #     is read but never used, so "prefer frontiers ahead" is not possible
+    #     with parameters. Only a lower planner_frequency calms it down.
+    #   * Blacklist: a frontier is skipped if its centroid is within 5 cells
+    #     (5 * 0.025 = 0.125 m) of a blacklisted point. This is hard-coded in
+    #     cells, so with the finer grid a blacklisted frontier whose centroid
+    #     drifts more than 12.5 cm can come back. (Changing that needs a patch
+    #     to the m-explore-ros2 submodule.)
+    #
+    # (Hz) was 0.2 (every 5 s). Re-rank every 10 s, so a goal that drifts a
+    # little is not re-sent (and Nav2 restarted) so often. A reached or
+    # failed goal still triggers a new choice immediately.
+    planner_frequency: 0.1
+    # (s) was 60. Blacklist the frontier if the distance to it has not
+    # shrunk for 30 s. Nav2's own progress checker (10 cm in 10 s) usually
+    # gives up first; this is the slower safety net.
+    progress_timeout: 30.0
+    # was 3.0. With 2.5 cm cells this gives 10 * 0.025 = 0.25 per metre of
+    # distance against 1.0 per metre of frontier length: a frontier must be
+    # 1 m longer to be worth a 4 m longer trip (before 3c5dc13: 0.15 per
+    # metre; after it, by accident, only 0.075). Near frontiers win, so the
+    # robot finishes one area before driving to the next.
+    potential_scale: 10.0
+    orientation_scale: 0.0       # read but unused in this version (see above)
+    gain_scale: 1.0              # (unchanged) weight of frontier length
+    transform_tolerance: 0.5     # (s) visual odometry TF can lag a little
+    # (m) Ignore frontiers shorter than this. Compared as
+    # size_in_cells * resolution >= min_frontier_size (frontier_search.cpp),
+    # so it is in metres and the cell size does not change it.
+    # 0.3 (was 0.75 in 42ff313, 0.5 before). 0.75 was too strict for the
+    # first camera view: at start-up the stereo view's free/unknown edge is
+    # ragged and broken into short pieces, and with none of them 0.75 m long
+    # explore_lite reported "No frontiers found" and stopped at once.
+    # Possible side effect: more small frontiers along walls (stereo gaps);
+    # Nav2 failing those gets them blacklisted.
+    min_frontier_size: 0.3
+    return_to_init: false        # true = drive back to the start pose when done

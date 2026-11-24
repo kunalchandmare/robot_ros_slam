@@ -1,14 +1,21 @@
 <?xml version="1.0"?>
 <!--
   Stereo Eye - a cute 2-wheel differential-drive mapping robot.
-  Single stereo camera "eye" (63 mm baseline, 1280x720 per eye @ 30 fps) for RTAB-Map stereo SLAM.
+  One "eye" that is a calibrated 2-camera stereo pair (80 mm baseline, 640x360 per eye @ 24 fps,
+  identical intrinsics) on a rigid stereo bar, for RTAB-Map stereo SLAM and navigation.
+  See ../STEREO_DESIGN.md for the camera design rationale.
 
   Frames (REP-105 / REP-103):
     base_footprint -> base_link -> {left,right}_wheel_link (continuous)
-                                -> caster_link (fixed)
+                                -> caster_link (fixed, rear)
+                                -> front_caster_link (fixed, front skid/caster)
+                                -> front_tof_link (fixed, short-range ToF / gpu_lidar)
+                                -> ballast_link (fixed, low battery pack)
                                 -> imu_link (fixed)
-                                -> head_link (fixed) -> camera_link -> camera_{left,right}_link
-                                                                    -> camera_{left,right}_optical_frame
+                                -> head_link (fixed) -> stereo_bar_link (fixed, rigid stereo bar)
+                                                          -> camera_link (stereo centre)
+                                                          -> camera_left_link  -> camera_left_optical_frame
+                                                          -> camera_right_link -> camera_right_optical_frame
   Visuals use primitives only (box / cylinder / sphere) so no meshes are needed.
 -->
 <robot name="stereo_eye" xmlns:xacro="http://www.ros.org/wiki/xacro">
@@ -31,7 +38,7 @@
   <xacro:property name="torso_r"      value="0.025"/>  <!-- corner radius -->
   <xacro:property name="torso_off_x"  value="-0.020"/>
   <xacro:property name="ground_clear" value="0.030"/>
-  <xacro:property name="torso_mass"   value="2.20"/>   <!-- incl. battery, SBC, motors -->
+  <xacro:property name="torso_mass"   value="0.80"/>   <!-- light shell only; battery mass is ballast_link -->
   <!-- torso centre height relative to base_link (axle) -->
   <xacro:property name="torso_cz" value="${ground_clear + torso_z/2 - wheel_radius}"/>
   <xacro:property name="torso_top" value="${torso_cz + torso_z/2}"/>
@@ -46,28 +53,97 @@
   <xacro:property name="head_core_y" value="0.150"/>  <!-- flat middle part -->
   <xacro:property name="head_z"     value="0.095"/>   <!-- height; ends are cylinders r=head_z/2 -->
   <xacro:property name="head_off_x" value="0.000"/>
-  <xacro:property name="head_mass"  value="0.35"/>
+  <xacro:property name="head_mass"  value="0.20"/>   <!-- hollow plastic head, kept light so the COM stays low -->
   <xacro:property name="head_cz"    value="${torso_top + cap_h + neck_h + head_z/2}"/>
 
-  <!-- Eye / stereo camera -->
+  <!-- Eye = stereo pair. The single cute eye is a wide "visor" (stadium shape) that holds both lenses. -->
   <xacro:property name="eye_z"         value="0.005"/>   <!-- eye centre above head centre -->
-  <xacro:property name="bezel_r"       value="0.044"/>
+  <xacro:property name="eye_half"      value="0.030"/>   <!-- half distance between the visor's round ends -->
+  <xacro:property name="glass_r"       value="0.030"/>   <!-- visor glass end radius (visor height = 2r) -->
+  <xacro:property name="bezel_r"       value="0.035"/>
+  <xacro:property name="rim_r"         value="0.039"/>
   <xacro:property name="bezel_len"     value="0.012"/>
-  <xacro:property name="glass_r"       value="0.039"/>
-  <xacro:property name="lens_r"        value="0.0065"/>
-  <xacro:property name="stereo_baseline" value="0.063"/>  <!-- ZED-Mini-like -->
-  <xacro:property name="cam_w"   value="1280"/>
-  <xacro:property name="cam_h"   value="720"/>
-  <xacro:property name="cam_fps" value="30"/>
-  <xacro:property name="cam_hfov" value="1.6"/>          <!-- rad (~91.7 deg) -->
-  <xacro:property name="cam_fx" value="${(cam_w/2.0) / tan(cam_hfov/2.0)}"/>
-  <xacro:property name="cam_mass" value="0.06"/>
+  <xacro:property name="lens_r"        value="0.0075"/>
+
+  <!-- Stereo camera pair (identical intrinsics for both eyes) -->
+  <xacro:property name="stereo_baseline" value="0.080"/> <!-- m; 6-12 cm range, see STEREO_DESIGN.md -->
+  <xacro:property name="cam_w"    value="640"/>           <!-- 640x360, below the original >=720p request: a deliberate trade for sim performance. Set cam_w=1280, cam_h=720 to restore. -->
+  <xacro:property name="cam_h"    value="360"/>
+  <xacro:property name="cam_fps"  value="24"/>            <!-- same rate for both eyes -> same sim stamps -->
+  <xacro:property name="cam_hfov" value="1.5"/>           <!-- rad (~85.9 deg) -->
+  <xacro:property name="cam_near" value="0.05"/>
+  <xacro:property name="cam_far"  value="15.0"/>          <!-- apartment scale -->
+  <xacro:property name="cam_fx"   value="${(cam_w/2.0) / tan(cam_hfov/2.0)}"/>  <!-- = fy (square pixels) -->
+  <xacro:property name="cam_cx"   value="${cam_w/2.0}"/>
+  <xacro:property name="cam_cy"   value="${cam_h/2.0}"/>
+  <xacro:property name="cam_tx_right" value="${-cam_fx*stereo_baseline}"/>    <!-- P[3] of the right camera -->
+  <xacro:property name="cam_mass" value="0.06"/>          <!-- stereo bar incl. both camera modules -->
+  <!-- stereo bar origin = lens front plane, midway between the lenses (head frame) -->
   <xacro:property name="cam_front_x" value="${head_x/2 + bezel_len - 0.002 + 0.006}"/>
 
-  <!-- Caster ball (rear) -->
+  <!-- Caster balls: rear support + a matching front skid/caster.
+       A rear-only caster leaves the axle as the front edge of the support polygon,
+       so forward braking can pitch the robot onto its face. The front caster extends
+       the polygon ahead of the axle. Both are fixed (no swivel) with very low friction. -->
   <xacro:property name="caster_r"    value="0.0175"/>
   <xacro:property name="caster_x"    value="-0.075"/>
   <xacro:property name="caster_mass" value="0.05"/>
+  <xacro:property name="front_caster_x"    value="0.075"/>
+  <xacro:property name="front_caster_mass" value="0.05"/>
+
+  <!-- Front time-of-flight (ToF) ranger: a small gpu_lidar that looks forward under
+       the stereo cameras. Max range defaults to 1.0 m and the horizontal FOV to
+       50 deg so the feeler sees plain furniture earlier (textureless boxes that
+       stereo often misses) and slightly off to the side, while still overlapping
+       the cameras' unreliable near band (~0.17-0.35 m). Raise tof_max_range or
+       tof_hfov if you want a longer or wider feeler.
+
+       The link origin is the optical centre, tof_standoff (3 mm) in FRONT of the
+       housing face. Every visual and collision of the housing and window sits
+       fully behind that origin, with the 3 mm air gap as clear margin, so no
+       robot geometry is in front of the origin or inside min range. This avoids
+       a self-hit: ign-rendering6 ogre1 GpuRays renders scene visuals (it does
+       not skip the parent link or model), and the window used to be a 2 mm
+       cylinder centred on the front face, so 1 mm stuck out past the origin.
+
+       tof_min_range is 0.01 m (was 0.02). ign-sensors6 Lidar::Clamp raises every
+       finite range below min up to range_min, so a 0.0 empty pixel or a self-hit
+       at 0 was published as exactly range_min and looked like a wall in open space.
+
+       The scan is 21 horizontal samples over 50 deg (same 2.5 deg step as the
+       old 11 samples over 25 deg) and 3 vertical samples over +/- 1 deg so a
+       single bad ogre1 pixel cannot dominate. The downward ray at -1 deg drops
+       only 1.0*tan(1 deg) ~ 17 mm from 5.5 cm height, so it still clears the
+       floor (and the casters, wheels and torso, which all sit behind the
+       origin; the outer rays at +/- 25 deg stay in front of that body). -->
+  <xacro:property name="tof_x"         value="0.020"/>
+  <xacro:property name="tof_y"         value="0.024"/>
+  <xacro:property name="tof_z"         value="0.016"/>
+  <xacro:property name="tof_mass"      value="0.02"/>
+  <xacro:property name="tof_min_range" value="0.01"/>
+  <xacro:property name="tof_max_range" value="1.0"/>  <!-- metres; change this to lengthen the feeler -->
+  <xacro:property name="tof_hfov"      value="0.8726646259971648"/>  <!-- 50 deg; rays at +/- 0.436 rad -->
+  <xacro:property name="tof_vfov"      value="0.03490658503988659"/>  <!-- 2 deg total, +/- 1 deg -->
+  <xacro:property name="tof_h_samples" value="21"/>
+  <xacro:property name="tof_v_samples" value="3"/>
+  <xacro:property name="tof_fps"       value="20"/>
+  <xacro:property name="tof_height"    value="0.055"/>  <!-- optical centre above the ground -->
+  <xacro:property name="tof_standoff"  value="0.003"/>  <!-- optical origin this far in front of the housing face -->
+  <xacro:property name="tof_window_len" value="0.002"/>
+  <!-- joint = optical origin: housing front + standoff, 2 mm past the front caster -->
+  <xacro:property name="tof_off_x"     value="${front_caster_x + caster_r + 0.002 + tof_x + tof_standoff}"/>
+  <!-- joint is in base_link (axle height = wheel_radius) -->
+  <xacro:property name="tof_off_z"     value="${tof_height - wheel_radius}"/>
+
+  <!-- Low battery / chassis ballast, sitting on the torso floor. Dense pack + base plate
+       (2.40 kg in 0.120 x 0.130 x 0.050 m, ~3077 kg/m^3). Keeps the COM low. -->
+  <xacro:property name="ballast_mass"  value="2.40"/>
+  <xacro:property name="ballast_x"     value="0.120"/>
+  <xacro:property name="ballast_y"     value="0.130"/>
+  <xacro:property name="ballast_z"     value="0.050"/>
+  <xacro:property name="ballast_off_x" value="-0.025"/>
+  <!-- torso floor in base_link is torso_cz - torso_z/2; ballast centre is half its height above that -->
+  <xacro:property name="ballast_off_z" value="${torso_cz - torso_z/2 + ballast_z/2}"/>
 
   <!-- ===================== MATERIALS ===================== -->
   <material name="se_white"><color rgba="0.96 0.96 0.97 1.0"/></material>
@@ -111,6 +187,20 @@
     </inertial>
   </xacro:macro>
 
+  <!-- Fortress / sdformat URDF-to-SDF honours these <gazebo> tags (mu1/mu2/kp/kd/minDepth)
+       and maps them onto the collision <surface><friction><ode> and <surface><contact><ode>
+       elements. That is why we use the tag names rather than writing <surface> inside the
+       URDF collision (plain URDF has no surface element). -->
+  <xacro:macro name="gazebo_ode_contact" params="link mu kp:=1000000.0 kd:=100.0 min_depth:=0.001">
+    <gazebo reference="${link}">
+      <mu1>${mu}</mu1>
+      <mu2>${mu}</mu2>
+      <kp>${kp}</kp>
+      <kd>${kd}</kd>
+      <minDepth>${min_depth}</minDepth>
+    </gazebo>
+  </xacro:macro>
+
   <!-- ===================== VISUAL HELPER MACROS ===================== -->
   <!-- Box with rounded vertical edges (2 crossed boxes + 4 corner cylinders) -->
   <xacro:macro name="rounded_box_visual" params="name x y z r cx cy cz mat">
@@ -145,6 +235,17 @@
       <geometry><cylinder radius="${r}" length="${t}"/></geometry>
       <material name="${mat}"/>
     </visual>
+  </xacro:macro>
+
+  <!-- Stadium (pill) facing +x: centre box + two discs at y = +/-half -->
+  <xacro:macro name="front_stadium" params="name x y z half r t mat">
+    <visual name="${name}_mid">
+      <origin xyz="${x} ${y} ${z}" rpy="0 0 0"/>
+      <geometry><box size="${t} ${2*half} ${2*r}"/></geometry>
+      <material name="${mat}"/>
+    </visual>
+    <xacro:front_disc name="${name}_l" x="${x}" y="${y + half}" z="${z}" r="${r}" t="${t}" mat="${mat}"/>
+    <xacro:front_disc name="${name}_r" x="${x}" y="${y - half}" z="${z}" r="${r}" t="${t}" mat="${mat}"/>
   </xacro:macro>
 
   <xacro:macro name="vbox" params="name x y z sx sy sz mat">
@@ -193,20 +294,17 @@
       <dynamics damping="0.01" friction="0.0"/>
     </joint>
 
-    <gazebo reference="${prefix}_wheel_link">
-      <mu1>1.0</mu1>
-      <mu2>1.0</mu2>
-      <kp>1000000.0</kp>
-      <kd>100.0</kd>
-      <minDepth>0.001</minDepth>
-    </gazebo>
+    <!-- Drive wheels keep high friction so they can apply the commanded speed without slipping. -->
+    <xacro:gazebo_ode_contact link="${prefix}_wheel_link" mu="1.2"/>
   </xacro:macro>
 
-  <!-- Camera eye link + its REP-103 optical frame -->
+  <!-- One camera of the stereo pair, rigidly mounted on the stereo bar, + its REP-103 optical frame.
+       camera_<side>_link: x forward (body convention, where the Gazebo sensor attaches).
+       camera_<side>_optical_frame: z forward, x right, y down (frame_id of images / camera_info). -->
   <xacro:macro name="stereo_eye" params="side reflect">
     <link name="camera_${side}_link"/>
     <joint name="camera_${side}_joint" type="fixed">
-      <parent link="camera_link"/>
+      <parent link="stereo_bar_link"/>
       <child link="camera_${side}_link"/>
       <origin xyz="0 ${reflect*stereo_baseline/2} 0" rpy="0 0 0"/>
     </joint>
@@ -256,9 +354,14 @@
       <geometry><cylinder radius="${neck_r}" length="${neck_h + 0.004}"/></geometry>
       <material name="se_blue"/>
     </visual>
-    <!-- Caster housing -->
+    <!-- Rear and front caster housings -->
     <visual name="caster_housing">
       <origin xyz="${caster_x} 0 ${torso_cz - torso_z/2 - 0.004}" rpy="0 0 0"/>
+      <geometry><cylinder radius="${caster_r + 0.004}" length="0.010"/></geometry>
+      <material name="se_light_grey"/>
+    </visual>
+    <visual name="front_caster_housing">
+      <origin xyz="${front_caster_x} 0 ${torso_cz - torso_z/2 - 0.004}" rpy="0 0 0"/>
       <geometry><cylinder radius="${caster_r + 0.004}" length="0.010"/></geometry>
       <material name="se_light_grey"/>
     </visual>
@@ -268,9 +371,9 @@
       <geometry><box size="${torso_x} ${torso_y} ${torso_z}"/></geometry>
     </collision>
 
-    <!-- Torso mass incl. battery: COM placed low and slightly rearward for caster stability -->
+    <!-- Torso shell only; the heavy battery lives on ballast_link, low on the torso floor. -->
     <xacro:box_inertial m="${torso_mass}" x="${torso_x}" y="${torso_y}" z="${torso_z}">
-      <origin xyz="${torso_off_x - 0.010} 0 ${torso_cz - 0.030}" rpy="0 0 0"/>
+      <origin xyz="${torso_off_x} 0 ${torso_cz}" rpy="0 0 0"/>
     </xacro:box_inertial>
   </link>
 
@@ -298,12 +401,79 @@
     <child link="caster_link"/>
     <origin xyz="${caster_x} 0 ${caster_r - wheel_radius}" rpy="0 0 0"/>
   </joint>
-  <gazebo reference="caster_link">
-    <mu1>0.0</mu1>
-    <mu2>0.0</mu2>
-    <kp>1000000.0</kp>
-    <kd>100.0</kd>
-  </gazebo>
+  <!-- Low friction so a fixed (non-swivel) ball does not fight turning or drag the heading. -->
+  <xacro:gazebo_ode_contact link="caster_link" mu="0.01"/>
+
+  <!-- Front caster / skid: same ball as the rear, under the front of the torso. Extends the
+       support polygon to x = +0.075 so forward braking cannot pitch the robot past the axle
+       onto its face. -->
+  <link name="front_caster_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><sphere radius="${caster_r}"/></geometry>
+      <material name="se_dark"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><sphere radius="${caster_r}"/></geometry>
+    </collision>
+    <xacro:sphere_inertial m="${front_caster_mass}" r="${caster_r}">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:sphere_inertial>
+  </link>
+  <joint name="front_caster_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="front_caster_link"/>
+    <origin xyz="${front_caster_x} 0 ${caster_r - wheel_radius}" rpy="0 0 0"/>
+  </joint>
+  <xacro:gazebo_ode_contact link="front_caster_link" mu="0.01"/>
+
+  <!-- Front ToF housing. Link origin is the optical centre, tof_standoff in
+       front of the housing face (x forward). The housing box, window and
+       collision all sit behind that origin with the standoff as clear
+       margin: no visual or collision crosses x = 0 or sits inside min range.
+       Inertia stays centred on the housing, so the 3 mm origin shift does
+       not move the mass in the world. -->
+  <link name="front_tof_link">
+    <visual name="tof_housing">
+      <origin xyz="${-(tof_standoff + tof_x/2)} 0 0" rpy="0 0 0"/>
+      <geometry><box size="${tof_x} ${tof_y} ${tof_z}"/></geometry>
+      <material name="se_dark"/>
+    </visual>
+    <!-- Window is a 2 mm cylinder on the front face, entirely behind the origin
+         (centre at -(standoff + half length), so it occupies
+         [-(standoff+len), -standoff]). -->
+    <visual name="tof_window">
+      <origin xyz="${-(tof_standoff + tof_window_len/2)} 0 0" rpy="0 ${PI/2} 0"/>
+      <geometry><cylinder radius="0.006" length="${tof_window_len}"/></geometry>
+      <material name="se_sky"/>
+    </visual>
+    <collision>
+      <origin xyz="${-(tof_standoff + tof_x/2)} 0 0" rpy="0 0 0"/>
+      <geometry><box size="${tof_x} ${tof_y} ${tof_z}"/></geometry>
+    </collision>
+    <xacro:box_inertial m="${tof_mass}" x="${tof_x}" y="${tof_y}" z="${tof_z}">
+      <origin xyz="${-(tof_standoff + tof_x/2)} 0 0" rpy="0 0 0"/>
+    </xacro:box_inertial>
+  </link>
+  <joint name="front_tof_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="front_tof_link"/>
+    <origin xyz="${tof_off_x} 0 ${tof_off_z}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Internal battery / chassis ballast on the torso floor. No visual or collision: it sits
+       inside the torso shell. Inertia is a solid box matching the pack size. -->
+  <link name="ballast_link">
+    <xacro:box_inertial m="${ballast_mass}" x="${ballast_x}" y="${ballast_y}" z="${ballast_z}">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:box_inertial>
+  </link>
+  <joint name="ballast_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="ballast_link"/>
+    <origin xyz="${ballast_off_x} 0 ${ballast_off_z}" rpy="0 0 0"/>
+  </joint>
 
   <!-- IMU (centre of the torso, on the axle line) -->
   <link name="imu_link"/>
@@ -343,20 +513,19 @@
     </visual>
     <!-- blue brow stripe on the head top -->
     <xacro:vbox name="brow" x="0.012" y="0" z="${head_z/2 + 0.0015}" sx="0.040" sy="0.110" sz="0.003" mat="se_blue"/>
-    <!-- big round eye: white bezel ring, blue rim, dark glass, two stereo lenses, sparkle -->
-    <xacro:front_disc name="eye_rim"   x="${head_x/2 + 0.002}" y="0" z="${eye_z}" r="${bezel_r + 0.004}" t="0.006" mat="se_blue"/>
-    <xacro:front_disc name="eye_bezel" x="${head_x/2 + bezel_len/2 - 0.002}" y="0" z="${eye_z}" r="${bezel_r}" t="${bezel_len}" mat="se_light_grey"/>
-    <xacro:front_disc name="eye_glass" x="${head_x/2 + bezel_len - 0.002 + 0.0015}" y="0" z="${eye_z}" r="${glass_r}" t="0.003" mat="se_glass"/>
-    <xacro:front_disc name="lens_l" x="${head_x/2 + bezel_len - 0.002 + 0.0035}" y="${stereo_baseline/2}" z="${eye_z}" r="${lens_r}" t="0.003" mat="se_sky"/>
-    <xacro:front_disc name="lens_r" x="${head_x/2 + bezel_len - 0.002 + 0.0035}" y="${-stereo_baseline/2}" z="${eye_z}" r="${lens_r}" t="0.003" mat="se_sky"/>
+    <!-- single wide "visor" eye: blue rim, light-grey bezel, dark glass, sparkle.
+         The two stereo lenses are visuals of stereo_bar_link (they sit inside this glass). -->
+    <xacro:front_stadium name="eye_rim"   x="${head_x/2 + 0.002}" y="0" z="${eye_z}" half="${eye_half}" r="${rim_r}" t="0.006" mat="se_blue"/>
+    <xacro:front_stadium name="eye_bezel" x="${head_x/2 + bezel_len/2 - 0.002}" y="0" z="${eye_z}" half="${eye_half}" r="${bezel_r}" t="${bezel_len}" mat="se_light_grey"/>
+    <xacro:front_stadium name="eye_glass" x="${head_x/2 + bezel_len - 0.002 + 0.0015}" y="0" z="${eye_z}" half="${eye_half}" r="${glass_r}" t="0.003" mat="se_glass"/>
     <visual name="eye_sparkle">
-      <origin xyz="${head_x/2 + bezel_len - 0.002 + 0.003} -0.012 ${eye_z + 0.020}" rpy="0 0 0"/>
+      <origin xyz="${head_x/2 + bezel_len - 0.002 + 0.003} -0.010 ${eye_z + 0.017}" rpy="0 0 0"/>
       <geometry><sphere radius="0.0055"/></geometry>
       <material name="se_white"/>
     </visual>
-    <!-- blush cheeks -->
-    <xacro:front_disc name="cheek_l" x="${head_x/2 + 0.001}" y="0.060" z="-0.026" r="0.011" t="0.003" mat="se_blush"/>
-    <xacro:front_disc name="cheek_r" x="${head_x/2 + 0.001}" y="-0.060" z="-0.026" r="0.011" t="0.003" mat="se_blush"/>
+    <!-- blush cheeks (below the visor's outer ends) -->
+    <xacro:front_disc name="cheek_l" x="${head_x/2 + 0.001}" y="0.062" z="-0.038" r="0.008" t="0.003" mat="se_blush"/>
+    <xacro:front_disc name="cheek_r" x="${head_x/2 + 0.001}" y="-0.062" z="-0.038" r="0.008" t="0.003" mat="se_blush"/>
     <!-- twin antennas with blue bobbles -->
     <visual name="antenna_l">
       <origin xyz="-0.010 0.050 ${head_z/2 + 0.013}" rpy="-0.30 0 0"/>
@@ -393,21 +562,41 @@
     <origin xyz="${head_off_x} 0 ${head_cz}" rpy="0 0 0"/>
   </joint>
 
-  <!-- Stereo camera body (centre between the two lenses, at the glass) -->
-  <link name="camera_link">
-    <xacro:box_inertial m="${cam_mass}" x="0.025" y="0.090" z="0.030">
-      <origin xyz="-0.012 0 0" rpy="0 0 0"/>
+  <!-- Rigid stereo bar: one body carrying both cameras, so the baseline / relative pose never changes.
+       Origin = lens front plane, midway between the two lenses; x forward, y left, z up. -->
+  <link name="stereo_bar_link">
+    <visual name="lens_left">
+      <origin xyz="-0.0025 ${stereo_baseline/2} 0" rpy="0 ${PI/2} 0"/>
+      <geometry><cylinder radius="${lens_r}" length="0.003"/></geometry>
+      <material name="se_sky"/>
+    </visual>
+    <visual name="lens_right">
+      <origin xyz="-0.0025 ${-stereo_baseline/2} 0" rpy="0 ${PI/2} 0"/>
+      <geometry><cylinder radius="${lens_r}" length="0.003"/></geometry>
+      <material name="se_sky"/>
+    </visual>
+    <!-- bar housing sits inside the head (no separate collision: covered by head_collision) -->
+    <xacro:box_inertial m="${cam_mass}" x="0.025" y="${stereo_baseline + 0.030}" z="0.030">
+      <origin xyz="-0.015 0 0" rpy="0 0 0"/>
     </xacro:box_inertial>
   </link>
-  <joint name="camera_joint" type="fixed">
+  <joint name="stereo_bar_joint" type="fixed">
     <parent link="head_link"/>
-    <child link="camera_link"/>
+    <child link="stereo_bar_link"/>
     <origin xyz="${cam_front_x} 0 ${eye_z}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Stereo-pair centre frame (x forward), kept for drivers/tools that expect camera_link -->
+  <link name="camera_link"/>
+  <joint name="camera_joint" type="fixed">
+    <parent link="stereo_bar_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
   <xacro:stereo_eye side="left"  reflect="1"/>
   <xacro:stereo_eye side="right" reflect="-1"/>
 
-  <!-- ===================== GAZEBO (Harmonic / gz-sim 8) ===================== -->
+  <!-- ===================== GAZEBO (gz sim: Fortress via ros-humble-ros-gz, or Harmonic) ===================== -->
   <xacro:if value="$(arg use_gazebo)">
     <xacro:include filename="stereo_eye.gazebo.xacro"/>
   </xacro:if>

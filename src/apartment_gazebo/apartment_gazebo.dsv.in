@@ -1,2 +1,3 @@
 prepend-non-duplicate;GAZEBO_MODEL_PATH;${prefix}/share/@PROJECT_NAME@/models
 prepend-non-duplicate;GZ_SIM_RESOURCE_PATH;${prefix}/share/@PROJECT_NAME@/models
+prepend-non-duplicate;IGN_GAZEBO_RESOURCE_PATH;${prefix}/share/@PROJECT_NAME@/models

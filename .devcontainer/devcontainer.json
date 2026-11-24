@@ -6,18 +6,23 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/ros2-dev,type=bind",
   "workspaceFolder": "/workspaces/ros2-dev",
   "runArgs": [
-    "--net=host"
+    "--net=host",
+    "--device=/dev/dxg"
   ],
   "containerEnv": {
     "DISPLAY": ":0",
     "WAYLAND_DISPLAY": "wayland-0",
     "XDG_RUNTIME_DIR": "/mnt/wslg/runtime-dir",
     "PULSE_SERVER": "/mnt/wslg/PulseServer",
-    "QT_X11_NO_MITSHM": "1"
+    "QT_X11_NO_MITSHM": "1",
+    "LD_LIBRARY_PATH": "/usr/lib/wsl/lib",
+    "GALLIUM_DRIVER": "d3d12",
+    "LIBGL_ALWAYS_SOFTWARE": "0"
   },
   "mounts": [
     "source=/run/desktop/mnt/host/wslg/.X11-unix,target=/tmp/.X11-unix,type=bind",
-    "source=/run/desktop/mnt/host/wslg,target=/mnt/wslg,type=bind"
+    "source=/run/desktop/mnt/host/wslg,target=/mnt/wslg,type=bind",
+    "source=/usr/lib/wsl,target=/usr/lib/wsl,type=bind"
   ],
   "customizations": {
     "vscode": {

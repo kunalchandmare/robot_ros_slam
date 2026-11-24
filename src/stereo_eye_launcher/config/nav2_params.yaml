@@ -1,0 +1,519 @@
+# nav2_params.yaml - Nav2 settings for stereo_eye frontier exploration (explore:=true).
+#
+# Loaded by launch.py through nav2_bringup's navigation_launch.py (Humble 1.1.x).
+# That launch file starts controller_server, smoother_server, planner_server,
+# behavior_server, bt_navigator, waypoint_follower and velocity_smoother, so
+# every one of them has a section here (navigation_launch.py only rewrites
+# use_sim_time for nodes that are listed).
+#
+# Robot: small differential drive, driven slowly (0.15 m/s, 0.4 rad/s) so
+# stereo visual odometry keeps tracking.
+#
+# Real size, measured from src/stereo_eye/urdf/stereo_eye.urdf.xacro (every
+# link's geometry in the base_footprint frame, which sits under the wheel axle):
+#   front   +0.116 m  (front face of the ToF housing; front caster +0.092)
+#   back    -0.097 m  (rear caster / torso -0.090)
+#   sides   +/-0.128 m (the head's round ends with the ear caps, 0.21-0.34 m
+#                       high; head collision box +/-0.122, wheels +/-0.112,
+#                       torso +/-0.075)
+#   farthest point from the centre: 0.130 m (a head corner)
+# So the robot is almost round (0.256 m wide, 0.213 m long) and turns about
+# its centre: a circle (robot_radius) is as tight as a polygon footprint here,
+# and stays correct while it turns in place.
+#
+# robot_radius 0.15 m = 0.128 m half-width + 0.022 m. (Old: 0.25 m = a guessed
+# 0.15 m body + 0.10 m margin, which made the robot "0.5 m wide" for Nav2.)
+# The brief asked for half-width + 0.05 m = 0.18 m, but then a door that is
+# body width + 10 cm (0.356 m) would be impassable: its centre is only
+# 0.178 m from each side, inside a 0.18 m radius, so the centre cell gets the
+# "inscribed" cost 253, which NavFn treats as a wall. The extra room now comes
+# from the inflation cost (see inflation_layer), which keeps the robot in the
+# middle of a gap without forbidding it. Door numbers: see the README
+# ("Why the robot fits through doors").
+#
+# Cell size 0.025 m (was 0.05 m) in both costmaps AND in rtabmap's /map
+# (Grid/CellSize in launch.py). With 5 cm cells a 0.356 m opening shows up as
+# only 6 free cells (0.30 m) in 84 % of positions, and the robot cannot pass.
+# With 2.5 cm cells it passes in every position (checked by brute force over
+# all cell alignments with Nav2's own cost formula and RPP's footprint check).
+#
+# Localization: NONE in Nav2 (no AMCL, no map_server). RTAB-Map provides the
+# whole chain instead:
+#   map -> vo             rtabmap (SLAM, loop closures)
+#   vo  -> odom           stereo_odometry (visual correction)
+#   odom -> base_footprint  Gazebo DiffDrive wheel odometry (bridged /wheel_tf)
+#
+# Map: rtabmap's 2D occupancy grid on /map (latched = transient local QoS).
+#
+# Live obstacles: an obstacle layer in both costmaps, fed by
+# /stereo/obstacle_cloud (rtabmap_util point_cloud_xyzrgb computing a point
+# cloud from the stereo pair, started by launch.py with explore:=true). It
+# marks walls as soon as the cameras see them, instead of waiting for
+# rtabmap's next /map update (about once per second, and only after the robot
+# moved).
+#
+# Stereo blind zone: stereo depth needs the same spot in both images. With the
+# 0.08 m baseline and 128 disparities the closest measurable depth is
+# fx * baseline / 128 = 343.5 * 0.08 / 128 ~= 0.21 m, and on plain, low-texture
+# walls block matching fails earlier, so in practice anything closer than
+# about 0.35 m in front of the cameras is invisible. The layer therefore keeps
+# obstacles it saw from further away (marks stay until a ray clears them), and
+# the front ToF sensor (both costmaps) covers that zone and beyond: 50 deg
+# wide, up to 1.0 m in front of the robot's nose (MechaX 9a375f1).
+#
+# Only non-default or important settings are listed; Nav2 fills in the rest.
+
+bt_navigator:
+  ros__parameters:
+    use_sim_time: True
+    global_frame: map               # goals from explore_lite are in the map frame
+    robot_base_frame: base_footprint
+    odom_topic: /wheel_odom         # only used for speed feedback; wheel odom never drops out
+    transform_tolerance: 0.5        # (s) visual odometry TF can lag a little behind the clock
+    bt_loop_duration: 10            # (ms) behaviour-tree tick period
+    default_server_timeout: 20      # (ms) wait for action servers per tick
+    # Behaviour tree for navigate_to_pose goals: Nav2's default tree (replan
+    # at 1 Hz) whose only recoveries are now "clear costmaps" and "wait 2 s"
+    # (no spin, no back-up: only stuck_recovery.py reverses), plus a check
+    # that rejects goals the robot is already standing on, see
+    # behavior_trees/explore_navigate_to_pose.xml. launch.py replaces this
+    # placeholder with the installed path of that file (a YAML file cannot
+    # look up package paths itself). It uses planner id "GridBased" and
+    # controller id "FollowPath" defined below.
+    default_nav_to_pose_bt_xml: "replaced_by_launch_py"
+    # Used by that check (the GoalReached node): goals closer than this to the
+    # robot are aborted, so explore_lite blacklists them. Must be larger than
+    # general_goal_checker.xy_goal_tolerance (0.30 m).
+    goal_reached_tol: 0.35          # (m)
+    # plugin_lib_names is left unset so Humble's built-in default list is used.
+
+# Helper nodes bt_navigator creates internally (they only need the sim clock).
+bt_navigator_navigate_through_poses_rclcpp_node:
+  ros__parameters:
+    use_sim_time: True
+
+bt_navigator_navigate_to_pose_rclcpp_node:
+  ros__parameters:
+    use_sim_time: True
+
+controller_server:
+  ros__parameters:
+    use_sim_time: True
+    controller_frequency: 10.0      # (Hz) plenty for 0.15 m/s
+    odom_topic: /wheel_odom         # current speed for the controller
+    min_x_velocity_threshold: 0.001 # speeds below these count as "stopped"
+    min_y_velocity_threshold: 0.5   # diff drive: no sideways motion
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.3          # (s) tolerate short controller failures
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    # Abort the goal if the robot moves less than 10 cm in 10 s; explore_lite
+    # then blacklists that frontier and picks another one. 10 s (was 15 s) is
+    # still enough for a full half turn in place (pi / 0.4 rad/s = 7.9 s), but a
+    # robot that hesitates in front of a gap gives up 5 s sooner.
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.10  # (m) unchanged
+      movement_time_allowance: 10.0   # (s) was 15.0
+
+    # Frontier goals only need a position: explore_lite sends a fixed
+    # orientation, so the yaw tolerance is a full turn (pi) to avoid a useless
+    # spin at every goal.
+    general_goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      stateful: True
+      # (m) was 0.25. 0.30 = "close enough" 5 cm sooner, so the robot does not
+      # creep the last centimetres into a corner where frontier goals often
+      # sit. Must stay below bt_navigator.goal_reached_tol (0.35 m).
+      xy_goal_tolerance: 0.30
+      yaw_goal_tolerance: 3.14      # (rad) = ignore final heading
+
+    # Regulated Pure Pursuit: simple, smooth path follower for slow diff
+    # drives. It turns in place towards the path first (gentle on visual
+    # odometry), then drives forward along it.
+    #
+    # Is this really the controller that runs? Yes: controller_plugins is
+    # ["FollowPath"], this section sets FollowPath.plugin to RPP (the exact
+    # Humble class name), and the behaviour tree calls controller_id
+    # "FollowPath". Nav2 would only fall back to its default (DWB) if this
+    # .plugin line were missing; if the plugin name were wrong, the
+    # controller_server would fail to start and the robot would not move at
+    # all. The "fan of arrows" seen in RViz is the Odometry display (it kept
+    # the last 100 /odom poses, so turning in place on the spot draws a fan);
+    # RPP itself only draws the carrot point and a short collision arc, and
+    # the RViz config has no DWB trajectory display. The Odometry display now
+    # keeps 1 arrow, see rviz/stereo_slam.rviz.
+    #
+    # Tuned for decisiveness (old -> new values are noted on each line).
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.15              # (m/s) cruise speed = our max (unchanged)
+      # Carrot distance on the path. Longer = smoother and fewer stop-and-turn
+      # decisions; 0.45 m is still short enough to follow a path through a
+      # door without cutting the corner.
+      lookahead_dist: 0.45                  # (m) was 0.4
+      min_lookahead_dist: 0.3               # (m) was 0.25
+      max_lookahead_dist: 0.6               # (m) unchanged (only used with velocity-scaled lookahead)
+      use_velocity_scaled_lookahead_dist: False  # fixed lookahead (speed is constant anyway)
+      transform_tolerance: 0.5              # (s) see bt_navigator
+      # Slow-down near the goal. Frontier goals are reached all the time, and
+      # creeping at 5 cm/s over the last 40 cm looked like hesitation.
+      min_approach_linear_velocity: 0.08    # (m/s) was 0.05
+      approach_velocity_scaling_dist: 0.3   # (m) was 0.4: start slowing later
+      use_regulated_linear_velocity_scaling: True   # slow down on tight curves
+      # Slow down close to obstacles, but gently: only within 0.25 m of an
+      # obstacle (was 0.4 m), so the robot slows inside a door gap (0.178 m
+      # from each side: 0.15 * 0.178 / 0.25 = 0.11 m/s) instead of crawling
+      # through every room.
+      use_cost_regulated_linear_velocity_scaling: True
+      cost_scaling_dist: 0.25               # (m) was 0.4
+      cost_scaling_gain: 1.0                # unchanged (1.0 = no extra slow-down)
+      inflation_cost_scaling_factor: 6.0    # was 4.0; must equal inflation_layer.cost_scaling_factor
+      regulated_linear_scaling_min_radius: 0.9      # (m) curves tighter than this slow down
+      # Never slower than this while driving (default 0.25 > our max). 0.08
+      # (was 0.05) keeps the robot clearly moving, well above stuck_recovery's
+      # min_cmd_speed check and the progress checker.
+      regulated_linear_scaling_min_speed: 0.08      # (m/s) was 0.05
+      use_rotate_to_heading: True           # turn in place when the path points away
+      rotate_to_heading_angular_vel: 0.4    # (rad/s) = our max turn rate
+      # Turn in place only if the carrot is more than 60 deg to the side (was
+      # 45 deg). Below that, RPP drives forward on a curve. With 45 deg the
+      # robot kept switching between "turn" and "drive" on curvy paths near
+      # frontiers, which looked like dithering on the spot. Kept at 60 deg
+      # (not raised): above that, pure pursuit would drive tight arcs that
+      # sweep the robot sideways towards walls; turning on the spot first is
+      # safer for a round robot and gentler on visual odometry. A new goal
+      # behind the robot therefore means one turn in place, then forward.
+      rotate_to_heading_min_angle: 1.05     # (rad) unchanged since 3c5dc13
+      max_angular_accel: 1.5                # (rad/s^2) matches the DiffDrive limit
+      # Forward only. RPP never drives backwards (and must not when
+      # use_rotate_to_heading is on); the only reversing is stuck_recovery.py.
+      allow_reversing: False
+      # Collision check on the local costmap (live stereo + ToF obstacles +
+      # /map): the robot's footprint (radius 0.15 m) is projected along the
+      # planned motion for up to 1.0 s (0.15 m at full speed, and never past
+      # the carrot). If its outline would touch a lethal cell, the controller
+      # stops and reports "collision ahead" and the behaviour tree's
+      # recoveries / explore_lite take over. 1.0 s (was 1.5 s) still stops
+      # well before a wall, but a single stereo speckle further ahead no
+      # longer freezes the robot.
+      use_collision_detection: True
+      max_allowed_time_to_collision_up_to_carrot: 1.0  # (s) was 1.5
+      max_robot_pose_search_dist: 10.0      # (m) how far along the path to find the robot
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: True
+      global_frame: odom            # local costmap follows the wheel-odometry frame
+      robot_base_frame: base_footprint
+      rolling_window: True          # 3 x 3 m window that moves with the robot
+      width: 3
+      height: 3
+      resolution: 0.025             # (m) was 0.05; same as rtabmap Grid/CellSize (see top)
+      robot_radius: 0.15            # (m) was 0.25; 0.128 m real half-width + 0.022 m (see top)
+      update_frequency: 5.0         # (Hz)
+      publish_frequency: 2.0        # (Hz) for RViz / behaviours
+      transform_tolerance: 0.5      # (s)
+      # Layers, applied in this order: rtabmap's /map cut to the window, live
+      # stereo obstacles on top, then inflation around both.
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_topic: /map
+        map_subscribe_transient_local: True   # rtabmap latches /map
+      # Live obstacle sources. Two read the same stereo cloud, one is the ToF:
+      #   stereo_mark  marks obstacles: only points 10-40 cm above the floor
+      #                (the floor itself, floor speckles and table tops are
+      #                ignored; low things directly ahead are the ToF's job).
+      #   stereo_clear clears free space: it also uses floor points (-10 cm to
+      #                40 cm), so rays to the visible floor erase old marks in
+      #                front of the robot. With marking points alone, empty
+      #                floor would never clear stale obstacles.
+      #   front_tof    the front time-of-flight range sensor (LaserScan,
+      #                1.0 m range, 50 deg wide, 21 x 3 = 63 rays since MechaX
+      #                9a375f1; was 0.30 m, 25 deg, 11 x 3), which also sees
+      #                inside the stereo blind zone. It marks and clears, so
+      #                the robot steers away from anything 0.04-1.0 m in front
+      #                of it; below 0.04 m stuck_recovery.py backs up instead
+      #                (tof_too_close_m).
+      #
+      # What the wider ToF marks: everything its 5.5 cm high fan hits within
+      # 1 m and +/-25 deg, i.e. plain furniture (which stereo cannot see), but
+      # now also walls ahead and door jambs. Driving through the middle of a
+      # 0.356 m door, a jamb 0.178 m to the side enters the fan about 0.38 m
+      # before the sensor reaches the door. That is fine: the simulated ToF
+      # has no noise, so it marks a jamb where it really is, the same place
+      # as the wall in rtabmap's map and the stereo marks. It only narrows a
+      # door if rtabmap drew the wall in the wrong place, and then the ToF
+      # mark is the correct one.
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        footprint_clearing_enabled: True  # never mark the robot's own cell
+        max_obstacle_height: 0.45   # (m) layer-wide cut-off (above the sources' limits)
+        combination_method: 1       # 1 = keep the highest cost of all layers
+        observation_sources: stereo_mark stereo_clear front_tof
+        front_tof:
+          topic: /front_tof
+          data_type: "LaserScan"
+          marking: True
+          clearing: True
+          # A "no echo" reading is inf. inf_is_valid is False, so those are
+          # simply dropped. (With True, Nav2 turns inf into a point at
+          # range_max - 0.1 mm, which would show up as a phantom obstacle
+          # 1.0 m in front of the robot.) Old ToF marks are still cleared: by rays to new ToF hits,
+          # and by the stereo_clear rays that pass over these cells to floor
+          # points further away, but only once they are older than
+          # observation_persistence (20 s, below).
+          inf_is_valid: False
+          # (m) was 0.30 = the old sensor range; 1.0 = the new one. Points at
+          # exactly 1.0 m are not marked (Nav2 keeps distances < this value).
+          obstacle_max_range: 1.0
+          # (m) was 0.0. Gazebo clamps every finite reading below range_min
+          # UP to exactly range_min (gz-sensors 6, Lidar::Clamp), and Kunal's
+          # log showed constant readings of the range_min (then 0.02 m) that
+          # were not real. range_min is 0.01 m since MechaX 501ef3f; the
+          # 0.025 m cut-off stays (unchanged, minimal fix).
+          # So anything at or below 0.025 m from the sensor is ignored. (Such
+          # points would lie inside the robot circle and be erased by
+          # footprint clearing anyway, but this keeps them out entirely.)
+          obstacle_min_range: 0.025
+          raytrace_max_range: 1.05    # (m) was 0.35; clear along the whole (1.0 m) beam
+          raytrace_min_range: 0.0
+          # (m) was 0.0. The rays are 3.8-7.2 cm above the floor at 1 m
+          # (5.5 cm +/- 1 deg), so no real hit is below 2 cm. A point lower
+          # than that would be a floor hit, and with 20 s persistence a long
+          # lived phantom obstacle, so it is dropped.
+          min_obstacle_height: 0.02
+          max_obstacle_height: 0.40
+          # (s) was 0.0 (latest scan only). Keep every ToF hit of the last
+          # 20 s. The obstacle layer first clears along the stereo rays and
+          # then marks ALL kept observations, so a ToF mark now survives the
+          # stereo clearing for 20 s. Why: plain one-colour furniture (bed,
+          # sofa, counter ... in apartment_gazebo) has no texture, so stereo
+          # sees almost nothing on it, and stereo rays to wrong far points ran
+          # through the box and wiped the ToF mark as soon as the robot had
+          # turned away. The robot then drove straight back into it. After
+          # 20 s things are as before (stereo may clear the mark again).
+          observation_persistence: 20.0
+          expected_update_rate: 0.0
+          # The sensor's front face is 0.115 m ahead of the robot centre, so
+          # hits closer than 0.035 m lie inside the footprint (radius 0.15 m)
+          # and are erased by footprint clearing; below 0.04 m is
+          # stuck_recovery.py's job anyway (tof_too_close_m 0.04).
+        stereo_mark:
+          topic: /stereo/obstacle_cloud
+          data_type: "PointCloud2"
+          marking: True
+          clearing: False
+          # (m) was 0.05. Stereo depth on the floor near walls is noisy and
+          # scattered points 5-10 cm high marked fake obstacles around the
+          # robot. 10 cm ignores that whole band. (Nav2 Humble's obstacle
+          # layer has no "minimum points per cell" option; lonely points are
+          # removed earlier, by the cloud's noise filter in launch.py.)
+          min_obstacle_height: 0.10
+          max_obstacle_height: 0.40   # (m) the robot fits under anything higher
+          obstacle_max_range: 2.5     # (m) stereo depth is too noisy further away
+          obstacle_min_range: 0.0
+          observation_persistence: 0.0  # 0 = use the latest cloud only
+          expected_update_rate: 0.0     # 0 = do not warn about the rate
+          inf_is_valid: False
+        stereo_clear:
+          topic: /stereo/obstacle_cloud
+          data_type: "PointCloud2"
+          marking: False
+          clearing: True
+          min_obstacle_height: -0.10  # (m) include floor points as ray end points
+          max_obstacle_height: 0.40
+          raytrace_max_range: 3.0     # (m) clear along rays up to 3 m (= cloud max_depth)
+          raytrace_min_range: 0.0
+          observation_persistence: 0.0
+          expected_update_rate: 0.0
+          inf_is_valid: False
+      # Inflation: cost around obstacles. Cells closer than robot_radius
+      # (0.15 m) to an obstacle get 253 ("the robot would touch it"), which
+      # the planner and controller avoid. Further out the cost falls off as
+      #   cost = 252 * exp(-cost_scaling_factor * (distance - 0.15))
+      # and is 0 beyond inflation_radius. With 6.0 and 0.35 m:
+      #   distance  0.178 m (door centre)  0.20  0.25  0.30  0.35  >0.35
+      #   cost      213                    186   138   102    75     0
+      # So in a door gap the centre has the lowest cost (the planner picks the
+      # middle), and it is below 253 (the door is open). In open rooms the
+      # robot is only pushed from walls closer than 0.35 m.
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.35      # (m) was 0.45: cost spreads this far from obstacles
+        cost_scaling_factor: 6.0    # was 4.0: higher = cost drops faster = gentler margins
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      use_sim_time: True
+      global_frame: map
+      robot_base_frame: base_footprint
+      robot_radius: 0.15            # (m) was 0.25; same as the local costmap (see top)
+      resolution: 0.025             # (m) was 0.05; same as rtabmap Grid/CellSize (see top)
+      update_frequency: 1.0         # (Hz) rtabmap's map changes about once per second
+      publish_frequency: 1.0        # (Hz) explore_lite reads this costmap
+      transform_tolerance: 0.5
+      track_unknown_space: True     # keep unknown cells unknown (-1): frontiers need them
+      always_send_full_costmap: True  # publish the whole costmap every time (explore_lite
+                                      # subscribes late and needs full maps, not updates)
+      # The size follows rtabmap's /map, which grows as the robot explores.
+      # The same live stereo obstacle layer as the local costmap, so the
+      # planner routes around obstacles rtabmap has not mapped yet. Its clearing
+      # only lowers its own layer. (Note: with combination_method 1 a cell this
+      # layer has cleared, i.e. set to free, does replace an unknown /map cell
+      # in this costmap. Not changed here; it is why the ToF does not clear.)
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_topic: /map
+        map_subscribe_transient_local: True
+      # Same sources as in the local costmap (see the comments there); the
+      # ToF was added here too (see front_tof below).
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        footprint_clearing_enabled: True  # never mark the robot's own cell
+        max_obstacle_height: 0.45   # (m) layer-wide cut-off (above the sources' limits)
+        combination_method: 1       # 1 = keep the highest cost of all layers
+        # front_tof added (was "stereo_mark stereo_clear"): the planner
+        # never saw the ToF before, so with furniture that stereo cannot see
+        # (plain boxes) it kept planning straight through it, and only the
+        # local costmap stopped the robot at the box face (RPP "collision
+        # ahead", then the same path again). Now the box face the ToF has
+        # touched is an obstacle for planning too.
+        observation_sources: stereo_mark stereo_clear front_tof
+        # Same ToF settings as in the local costmap, with two differences:
+        # clearing False and no inf points. ToF clearing rays would set
+        # cells of this layer to "free", and with combination_method 1 that
+        # also turns UNKNOWN cells of rtabmap's map into free space in front
+        # of the robot (frontier search uses this costmap). Without clearing
+        # a ToF mark here lives 20 s (observation_persistence), then
+        # stereo_clear rays can erase it as before.
+        front_tof:
+          topic: /front_tof
+          data_type: "LaserScan"
+          marking: True
+          clearing: False
+          inf_is_valid: False         # "no echo" (inf) readings are dropped
+          obstacle_max_range: 1.0     # (m) was 0.30; = sensor range (MechaX 9a375f1)
+          obstacle_min_range: 0.025   # (m) ignore the range_min clamp readings
+          min_obstacle_height: 0.02   # (m) was 0.0; no floor hits (see local costmap)
+          max_obstacle_height: 0.40
+          observation_persistence: 20.0  # (s) see the local costmap
+          expected_update_rate: 0.0
+        stereo_mark:
+          topic: /stereo/obstacle_cloud
+          data_type: "PointCloud2"
+          marking: True
+          clearing: False
+          # (m) was 0.05. Stereo depth on the floor near walls is noisy and
+          # scattered points 5-10 cm high marked fake obstacles around the
+          # robot. 10 cm ignores that whole band. (Nav2 Humble's obstacle
+          # layer has no "minimum points per cell" option; lonely points are
+          # removed earlier, by the cloud's noise filter in launch.py.)
+          min_obstacle_height: 0.10
+          max_obstacle_height: 0.40   # (m) the robot fits under anything higher
+          obstacle_max_range: 2.5     # (m) stereo depth is too noisy further away
+          obstacle_min_range: 0.0
+          observation_persistence: 0.0  # 0 = use the latest cloud only
+          expected_update_rate: 0.0     # 0 = do not warn about the rate
+          inf_is_valid: False
+        stereo_clear:
+          topic: /stereo/obstacle_cloud
+          data_type: "PointCloud2"
+          marking: False
+          clearing: True
+          min_obstacle_height: -0.10  # (m) include floor points as ray end points
+          max_obstacle_height: 0.40
+          raytrace_max_range: 3.0     # (m) clear along rays up to 3 m (= cloud max_depth)
+          raytrace_min_range: 0.0
+          observation_persistence: 0.0
+          expected_update_rate: 0.0
+          inf_is_valid: False
+      inflation_layer:               # same as the local costmap (see there)
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.35      # (m) was 0.45
+        cost_scaling_factor: 6.0    # was 4.0; must equal FollowPath.inflation_cost_scaling_factor
+
+planner_server:
+  ros__parameters:
+    use_sim_time: True
+    expected_planner_frequency: 1.0
+    planner_plugins: ["GridBased"]
+    # NavFn: classic Dijkstra grid planner on the global costmap.
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      # explore_lite's goal is a frontier's centroid (average of its cells),
+      # which can sit in unknown space or, on a curved frontier, in or next
+      # to a wall. If the goal cell itself cannot be reached, NavFn plans to
+      # the best reachable cell within this distance. 0.3 m (was 0.5) =
+      # the goal checker's xy_goal_tolerance, so the end of such a path also
+      # counts as "goal reached". Goals deeper inside a wall now fail quickly
+      # and get blacklisted instead of sending the robot right up to the wall.
+      tolerance: 0.3                # (m) was 0.5
+      use_astar: False              # Dijkstra; fine for a small apartment
+      allow_unknown: True           # (unchanged) unknown cells are drivable for the planner
+      # Note on the START: NavFn treats both lethal (254) and inscribed (253)
+      # cells as walls, and only clears the robot's own cell. If the robot's
+      # centre ends up within robot_radius (0.15 m) of a wall, every plan
+      # fails. stuck_recovery.py's [NO PATH] trigger moves the robot 0.15 m
+      # off the wall in that case (Nav2's BackUp recovery used to do this).
+
+smoother_server:
+  ros__parameters:
+    use_sim_time: True              # defaults otherwise; the default BT does not smooth paths
+
+behavior_server:
+  ros__parameters:
+    use_sim_time: True
+    costmap_topic: local_costmap/costmap_raw        # collision checks for recoveries
+    footprint_topic: local_costmap/published_footprint
+    cycle_frequency: 10.0
+    # spin and backup stay loaded although the explore tree no longer uses
+    # them: bt_navigator also loads Nav2's default navigate_through_poses tree
+    # at start-up, which contains Spin and BackUp, and a BT action node whose
+    # server is missing makes bt_navigator fail to activate. Loaded but never
+    # called, they do nothing.
+    behavior_plugins: ["spin", "backup", "drive_on_heading", "wait"]
+    spin:
+      plugin: "nav2_behaviors/Spin"
+    backup:
+      plugin: "nav2_behaviors/BackUp"
+    drive_on_heading:
+      plugin: "nav2_behaviors/DriveOnHeading"
+    wait:
+      plugin: "nav2_behaviors/Wait"
+    global_frame: odom
+    robot_base_frame: base_footprint
+    transform_tolerance: 0.5
+    simulate_ahead_time: 2.0        # (s) collision look-ahead for spin/backup
+    max_rotational_vel: 0.4         # (rad/s) recovery spins as slow as normal driving
+    min_rotational_vel: 0.2
+    rotational_acc_lim: 1.0         # (rad/s^2)
+
+waypoint_follower:
+  ros__parameters:
+    use_sim_time: True              # started by navigation_launch.py; not used here
+
+# Last stage before the robot: limits and smooths every command. Its output
+# (cmd_vel_smoothed) is remapped by navigation_launch.py to /cmd_vel, which
+# ros_gz_bridge forwards to the Gazebo DiffDrive.
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: True
+    smoothing_frequency: 20.0       # (Hz)
+    scale_velocities: False
+    feedback: "OPEN_LOOP"           # trust the last command, not odometry
+    max_velocity: [0.15, 0.0, 0.4]  # [x m/s, y m/s, theta rad/s]
+    min_velocity: [-0.15, 0.0, -0.4]
+    max_accel: [0.5, 0.0, 1.5]      # matches DiffDrive max accelerations
+    max_decel: [-0.5, 0.0, -1.5]
+    odom_topic: /wheel_odom         # unused with OPEN_LOOP, set for clarity
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0           # (s) send zero if no command arrives

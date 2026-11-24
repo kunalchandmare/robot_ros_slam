@@ -7,3 +7,6 @@
 __pycache__/
 *.pyc
 .vscode/settings.json
+
+# Terminal output saved by src/stereo_eye_launcher/scripts/run_sim.sh
+logs/

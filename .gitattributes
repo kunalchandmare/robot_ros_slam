@@ -1,0 +1,7 @@
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+
+# Scripts run inside the Linux container: always check out with LF,
+# even on Windows (core.autocrlf), or bash fails with "bash\r: No such file".
+*.sh   text eol=lf
+*.bash text eol=lf
+*.py   text eol=lf

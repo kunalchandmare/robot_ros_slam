@@ -3,7 +3,7 @@
 <package format="3">
   <name>stereo_eye</name>
   <version>0.1.0</version>
-  <description>Robot description (model only) of Stereo Eye: a cute 2-wheel differential-drive robot with a single stereo-camera eye (1280x720 per eye), built for RTAB-Map stereo mapping. URDF/Xacro with primitive geometry only.</description>
+  <description>Robot description (model only) of Stereo Eye: a cute 2-wheel differential-drive robot with a single stereo-camera eye (640x360 per eye @ 24 fps; originally 1280x720, can be restored in the xacro), built for RTAB-Map stereo mapping. URDF/Xacro with primitive geometry only.</description>
   <maintainer email="kunal@example.com">Kunal</maintainer>
   <license>Apache-2.0</license>
 
