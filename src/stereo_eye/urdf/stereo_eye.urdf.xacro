@@ -92,9 +92,11 @@
   <xacro:property name="front_caster_mass" value="0.05"/>
 
   <!-- Front time-of-flight (ToF) ranger: a small gpu_lidar that looks forward under
-       the stereo cameras. Max range defaults to 0.30 m so it overlaps the cameras'
-       unreliable near band (~0.17-0.35 m) and covers the last few centimetres the
-       stereo cannot trust. Raise tof_max_range if you want a longer feeler.
+       the stereo cameras. Max range defaults to 1.0 m and the horizontal FOV to
+       50 deg so the feeler sees plain furniture earlier (textureless boxes that
+       stereo often misses) and slightly off to the side, while still overlapping
+       the cameras' unreliable near band (~0.17-0.35 m). Raise tof_max_range or
+       tof_hfov if you want a longer or wider feeler.
 
        The link origin is the optical centre, tof_standoff (3 mm) in FRONT of the
        housing face. Every visual and collision of the housing and window sits
@@ -106,21 +108,23 @@
 
        tof_min_range is 0.01 m (was 0.02). ign-sensors6 Lidar::Clamp raises every
        finite range below min up to range_min, so a 0.0 empty pixel or a self-hit
-       at 0 was published as exactly 0.02 m and looked like a wall in open space.
+       at 0 was published as exactly range_min and looked like a wall in open space.
 
-       The scan is 11 horizontal samples over 25 deg and 3 vertical samples over
-       +/- 1 deg so a single bad ogre1 pixel cannot dominate. The downward ray
-       at -1 deg drops only 0.30*tan(1 deg) ~ 5 mm from 5.5 cm height, so it
-       still clears the floor (and the casters, which are behind the origin). -->
+       The scan is 21 horizontal samples over 50 deg (same 2.5 deg step as the
+       old 11 samples over 25 deg) and 3 vertical samples over +/- 1 deg so a
+       single bad ogre1 pixel cannot dominate. The downward ray at -1 deg drops
+       only 1.0*tan(1 deg) ~ 17 mm from 5.5 cm height, so it still clears the
+       floor (and the casters, wheels and torso, which all sit behind the
+       origin; the outer rays at +/- 25 deg stay in front of that body). -->
   <xacro:property name="tof_x"         value="0.020"/>
   <xacro:property name="tof_y"         value="0.024"/>
   <xacro:property name="tof_z"         value="0.016"/>
   <xacro:property name="tof_mass"      value="0.02"/>
   <xacro:property name="tof_min_range" value="0.01"/>
-  <xacro:property name="tof_max_range" value="0.30"/>  <!-- metres; change this to lengthen the feeler -->
-  <xacro:property name="tof_hfov"      value="0.4363323129985824"/>  <!-- 25 deg; rays at +/- 0.218 rad -->
+  <xacro:property name="tof_max_range" value="1.0"/>  <!-- metres; change this to lengthen the feeler -->
+  <xacro:property name="tof_hfov"      value="0.8726646259971648"/>  <!-- 50 deg; rays at +/- 0.436 rad -->
   <xacro:property name="tof_vfov"      value="0.03490658503988659"/>  <!-- 2 deg total, +/- 1 deg -->
-  <xacro:property name="tof_h_samples" value="11"/>
+  <xacro:property name="tof_h_samples" value="21"/>
   <xacro:property name="tof_v_samples" value="3"/>
   <xacro:property name="tof_fps"       value="20"/>
   <xacro:property name="tof_height"    value="0.055"/>  <!-- optical centre above the ground -->

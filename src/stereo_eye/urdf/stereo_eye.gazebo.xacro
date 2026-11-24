@@ -111,12 +111,12 @@
        this; the Contact system is not used. Topic is set at sensor level
        (unlike the old contact sensor).
 
-       Range min is 0.01 m, max 0.30 m. Lidar::Clamp promotes any finite value
+       Range min is 0.01 m, max 1.0 m. Lidar::Clamp promotes any finite value
        below min up to range_min, so a 0.0 empty pixel looks like a hit at
-       min. The 11 x 3 sample pattern (25 deg H, +/- 1 deg V) is there so a
-       single bad ogre1 second-pass pixel is less likely to pin the whole
-       scan at range_min. Geometry of this link is entirely behind the
-       sensor origin (see stereo_eye.urdf.xacro). -->
+       min. The 21 x 3 sample pattern (50 deg H, +/- 1 deg V) keeps the old
+       2.5 deg horizontal step so a single bad ogre1 second-pass pixel is
+       less likely to pin the whole scan at range_min. Geometry of this
+       link is entirely behind the sensor origin (see stereo_eye.urdf.xacro). -->
   <gazebo reference="front_tof_link">
     <sensor name="front_tof" type="gpu_lidar">
       <always_on>true</always_on>

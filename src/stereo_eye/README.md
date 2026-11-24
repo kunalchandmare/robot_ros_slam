@@ -164,16 +164,22 @@ than about 0.17-0.35 m (the near "blind zone"), so a planner that only looks at 
 cloud can drive the robot into a wall in that last stretch. The front ToF is a short-range
 feeler that sits under the cameras and measures distance to whatever is just ahead.
 
-**Why 0.30 m.** The default max range (`tof_max_range`) is 0.30 m so the ToF *overlaps*
-the stereo near band instead of stopping short of it. A 0.10 m cap would have left a gap
-between 0.10 m and the stereo minimum (~0.17-0.35 m) that neither sensor could cover.
-At 0.30 m the two overlap from about 0.17 m to 0.30 m; only a thin sliver around
-0.30-0.35 m is still soft, where the ToF has already run out and stereo is only just
-becoming trustworthy. Raise `tof_max_range` in the xacro (and regenerate the URDF) if you
-want the feeler to reach further.
+**Why 1.0 m and 50 deg.** The default max range (`tof_max_range`) is 1.0 m and the
+horizontal FOV (`tof_hfov`) is 50 deg so the feeler sees plain furniture earlier —
+textureless boxes and chair legs that stereo often misses — including pieces slightly
+off to the side. That still *overlaps* the stereo near band (~0.17-0.35 m) and now
+covers well past it, so there is no gap between the two. (A 0.10 m cap would have
+left 0.10-0.17/0.35 m uncovered; 0.30 m already overlapped the near band but only
+saw a box in the last 30 cm.) 50 deg is the middle of a 45-60 deg window: wide
+enough for furniture just off the nose, not so wide that hallway walls fill the
+outer rays while hugging them. 21 horizontal samples keep the same 2.5 deg step
+as the old 11 samples over 25 deg. Raise `tof_max_range` or `tof_hfov` in the
+xacro (and regenerate the URDF) if you want a longer or wider feeler. The
+launcher costmaps must also raise their ToF `obstacle_max_range` (still 0.30 m
+at the time of this change) or Nav2 will ignore everything past 30 cm.
 
 **Min and max range.** `tof_min_range` (0.01 m) is the closest reading the sensor will
-report: closer than that is treated as invalid. `tof_max_range` (0.30 m) is the farthest
+report: closer than that is treated as invalid. `tof_max_range` (1.0 m) is the farthest
 it will report; nothing beyond that is seen by this sensor.
 
 **Fake min-range readings.** ign-sensors6 `Lidar::Clamp` raises every *finite* range
@@ -185,18 +191,19 @@ as a finite 0. Either way the published scan is a wall at `range_min` even in op
 space, which used to trip false TOO CLOSE recoveries. Two model-side fixes: the
 optical origin is 3 mm in front of the housing face, and every housing/window visual
 and collision sits fully behind that origin (the window used to be a 2 mm cylinder
-centred on the face, so 1 mm stuck out). And the scan is 11 horizontal samples over
-25 deg plus 3 vertical samples over +/- 1 deg, so a single bad pixel is less likely
+centred on the face, so 1 mm stuck out). And the scan is 21 horizontal samples over
+50 deg plus 3 vertical samples over +/- 1 deg, so a single bad pixel is less likely
 to pin the whole feeler. Downstream should still treat a reading at or below
 `range_min` as invalid, not as a real obstacle.
 
 The beam is aimed straight ahead (zero pitch) from 5.5 cm above the ground. The
-lowest ray, at -1 deg, drops only 0.30*tan(1 deg) ~ 5 mm at max range, so it still
-clears the floor by about 5.0 cm (it would need a downward pitch of at least
-atan(0.055/0.30) ~ 10 deg to hit the ground). The housing sits 2 mm in front of the
+lowest ray, at -1 deg, drops only 1.0*tan(1 deg) ~ 17 mm at max range, so it still
+clears the floor by about 3.8 cm (it would need a downward pitch of at least
+atan(0.055/1.0) ~ 3.1 deg to hit the ground). The housing sits 2 mm in front of the
 front caster; the optical origin is 3 mm in front of the housing, and everything
-else (casters, wheels, torso) is behind that origin, so the fan also clears the
-robot's own body. Horizontal and vertical sample counts, both FOVs and both range
+else (casters, wheels, torso) is behind that origin, so the 50 deg fan also clears
+the robot's own body — the outer rays at +/- 25 deg still only travel forward of
+the origin. Horizontal and vertical sample counts, both FOVs and both range
 limits are xacro properties (`tof_h_samples`, `tof_v_samples`, `tof_hfov`,
 `tof_vfov`, `tof_min_range`, `tof_max_range`).
 
@@ -204,8 +211,8 @@ limits are xacro properties (`tof_h_samples`, `tof_v_samples`, `tof_hfov`,
 |---|---|
 | Housing | 2.0 x 2.4 x 1.6 cm, 0.02 kg, dark box with a sky-blue window |
 | Optical origin in `base_footprint` | (0.1175, 0, 0.055) m, x forward, no pitch, 3 mm in front of the housing face. Housing occupies x = 0.0945-0.1145 m, z = 0.047-0.063 m. Window is on the front face, entirely behind the origin. |
-| Scan | gpu_lidar, 20 Hz, 11 horizontal samples over 25 deg, 3 vertical samples over +/- 1 deg |
-| Range | 0.01-0.30 m (`tof_min_range` / `tof_max_range`) |
+| Scan | gpu_lidar, 20 Hz, 21 horizontal samples over 50 deg, 3 vertical samples over +/- 1 deg |
+| Range | 0.01-1.0 m (`tof_min_range` / `tof_max_range`) |
 | gz topic | **`/front_tof`** (absolute, set at sensor level). ign-sensors6 also publishes **`/front_tof/points`**. |
 | gz messages | `ignition.msgs.LaserScan` on `/front_tof`; `ignition.msgs.PointCloudPacked` on `/front_tof/points` |
 | ROS bridge (Humble `ros_gz_bridge`) | `/front_tof@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan` (or `ignition.msgs.LaserScan`; Humble accepts both). Optional points: `/front_tof/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked`. |
@@ -298,7 +305,7 @@ simulator-agnostic. It declares:
 |---|---|
 | `stereo_left`, `stereo_right` camera sensors | On `camera_left_link` / `camera_right_link`: 640×360, 24 Hz (same rate, so same stamps), HFOV 1.5, clip 0.05–15 m, Gaussian noise σ 0.005, identical lens intrinsics + projection (right Tx = −27.48), topics `stereo/{left,right}/image_raw` + `stereo/{left,right}/camera_info`; frame = the optical frame via both `<ignition_frame_id>` (Fortress, ign-sensors 6.2+) and `<gz_frame_id>` (Garden/Harmonic) |
 | `imu_sensor` | On `imu_link` (both frame tags), 100 Hz, topic `imu`, gyro σ 0.0009 rad/s, accel σ 0.017 m/s² |
-| `front_tof` | gpu_lidar on `front_tof_link`, 20 Hz, 11 x 3 samples (25 deg H, +/- 1 deg V), range 0.01-0.30 m, topic `/front_tof` (LaserScan) plus `/front_tof/points`. Optical origin 3 mm in front of the housing. Both frame tags = `front_tof_link`. Driven by the existing Sensors system (ogre). |
+| `front_tof` | gpu_lidar on `front_tof_link`, 20 Hz, 21 x 3 samples (50 deg H, +/- 1 deg V), range 0.01-1.0 m, topic `/front_tof` (LaserScan) plus `/front_tof/points`. Optical origin 3 mm in front of the housing. Both frame tags = `front_tof_link`. Driven by the existing Sensors system (ogre). |
 | DiffDrive plugin | `left/right_wheel_joint`, separation 0.19, radius 0.065, limits ±0.3 m/s, ±1.0 rad/s, ±0.5 m/s², ±1.5 rad/s²; `cmd_vel` → `odom` + `wheel_tf` (odom → base_footprint) at **50 Hz**. On gz (Fortress / ign-gazebo6) the absolute topic names are `/odom` and `/wheel_tf` (relative plugin names, not scoped under `/model/stereo_eye/`) |
 | JointStatePublisher plugin | Publishes both wheel joints on `joint_states` |
 
