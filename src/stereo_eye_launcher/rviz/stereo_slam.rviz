@@ -108,6 +108,16 @@ Visualization Manager:
       Topic:
         Value: /explore/frontiers
 
+    # Live stereo obstacle points used by Nav2's obstacle layers
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Obstacle Cloud
+      Enabled: false
+      Style: Points
+      Size (Pixels): 3
+      Color Transformer: AxisColor
+      Topic:
+        Value: /stereo/obstacle_cloud
+
     # Path the Nav2 planner computed to the current frontier
     - Class: rviz_default_plugins/Path
       Name: Plan

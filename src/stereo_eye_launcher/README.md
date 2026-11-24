@@ -14,9 +14,11 @@ actually installs.
 
 ```
 stereo_eye_launcher/
-├── CMakeLists.txt     # ament_cmake, installs launch/, rviz/, config/ and the map saver
+├── CMakeLists.txt     # ament_cmake, installs launch/, rviz/, config/, behavior_trees/ and the helper scripts
 ├── package.xml        # runtime dependencies
 ├── README.md
+├── behavior_trees/
+│   └── explore_navigate_to_pose.xml  # Nav2 behaviour tree for explore:=true
 ├── config/
 │   ├── nav2_params.yaml     # Nav2 settings for explore:=true
 │   └── explore_params.yaml  # explore_lite settings for explore:=true
@@ -27,7 +29,8 @@ stereo_eye_launcher/
 │   └── stereo_slam.rviz
 └── scripts/
     ├── run_sim.sh            # source the workspace and launch, in one command
-    └── explore_map_saver.py  # saves the map when exploration is done
+    ├── explore_map_saver.py  # saves the map when exploration is done
+    └── stuck_recovery.py     # backs up and turns when the robot is stuck
 ```
 
 ## Requirements
@@ -663,6 +666,59 @@ the steering window uses.
 - **Plan** (green line): the path Nav2 is following to the current frontier.
 - **Global Costmap** (off by default; tick it in the Displays panel): the map
   as Nav2 sees it, with a coloured safety margin around walls.
+- **Obstacle Cloud** (small dots, off by default): the live stereo points Nav2
+  uses to see walls and furniture (`/stereo/obstacle_cloud`).
+
+### How the robot avoids walls
+
+**Live obstacles.** Besides rtabmap's map, Nav2 now also looks at a live
+point cloud computed from the two camera images (node
+`stereo_obstacle_cloud`, rtabmap_util `point_cloud_xyzrgb`). Points between
+5 cm and 40 cm above the floor and up to 2.5 m away are marked as obstacles
+in both costmaps right away, without waiting for rtabmap's map update. Floor
+points are used to erase old obstacles that are no longer there.
+
+**The blind zone.** Stereo depth works by finding the same spot in the left
+and the right image. Very close to the cameras (closer than about 0.35 m in
+front of them, worse on plain walls) the two images differ too much and
+nothing is measured, so a wall that close is invisible. That is why:
+
+- obstacles seen from further away are **kept** in the costmap while the robot
+  gets closer,
+- the robot counts as 0.25 m wide in radius (0.15 m body + 0.10 m margin), and
+  the path follower checks about 1.5 s ahead and **stops** when the robot would
+  touch an obstacle. It usually stops with its body 0.1 to 0.3 m from a wall,
+- Nav2's recoveries no longer wipe obstacles within 0.75 m of the robot.
+
+**Stuck recovery.** If the robot still ends up pushing into something, the
+`stuck_recovery` node notices it. "Stuck" means either the bumper touched
+something, or Nav2 has asked the robot to drive (faster than 0.05 m/s) for
+2 s while the camera-based position (visual odometry) moved less than 3 cm.
+The wheels are not trusted for this, because they keep turning when they slip.
+It then:
+
+1. prints `[STUCK] Robot pushing into a wall at (x, y): backing up and
+   choosing another frontier`,
+2. tells explore_lite to give up that frontier (it turns red in RViz),
+3. backs up 0.2 m slowly and turns about 90 degrees (left and right in turn),
+4. lets exploration continue (`[STUCK] Recovery done, exploration continues.`).
+
+After a recovery it waits 10 s before it reacts again. All numbers are
+parameters of the node; see the top of `scripts/stuck_recovery.py`.
+
+**Bumper (needs MechaX).** The bumper part only works once the robot model has
+a Gazebo contact sensor on a front bumper and its topic is bridged to ROS. Until
+then the node simply never sees a contact, and only the "pushing without
+moving" check works. What is needed:
+
+- in `stereo_eye.gazebo.xacro`: a `contact` sensor on a front bumper collision
+  that does not touch the floor, plus the world's Contact system plugin
+  (`ignition-gazebo-contact-system` on Fortress), publishing for example on the
+  Gazebo topic `/bumper`;
+- in `launch.py`, one bridge line (not added yet because the topic name is not
+  final): `'/bumper@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts'`;
+- if the topic or message type differs, set the `stuck_recovery` parameters
+  `bumper_topic` and `bumper_type` (`contacts`, `bool` or `none`).
 
 ### Where the map is saved
 
@@ -732,6 +788,25 @@ ros2 topic pub --once /explore/resume std_msgs/msg/Bool "{data: false}"
 ros2 topic pub --once /explore/resume std_msgs/msg/Bool "{data: true}"
 ```
 
+**The robot drives into a wall and keeps pushing.** It should now stop in
+front of walls (live obstacle layer) and, if it still pushes, `[STUCK]`
+messages appear and it backs up by itself. If not:
+
+- Check the obstacle cloud: `ros2 topic hz /stereo/obstacle_cloud` should show
+  about 24 Hz. Tick **Obstacle Cloud** in RViz: walls in front of the robot
+  should be covered with dots. Plain walls without texture give few dots.
+- Check that the stuck watchdog runs: the terminal shows `Watching for a stuck
+  robot` at start-up.
+- If `[STUCK]` repeats again and again in the same place, the robot is boxed
+  in; stop the launch, move it with `set_pose` (see
+  [Troubleshooting](#troubleshooting)) and start again.
+
+**The robot stops too far from walls or refuses to go through a door.** The
+safety margin makes the robot 0.5 m wide for Nav2. Openings narrower than
+about 0.6 m are treated as closed. Fake obstacles from noisy stereo points can
+also block a doorway for a while; they are erased when the robot sees the
+floor behind them.
+
 **Visual odometry got lost.** Signs are `Not enough inliers` from
 `stereo_odometry` and a map that stops growing. Odometry resets itself on the
 next frame and continues from the last position, so the map stays one piece;
@@ -756,10 +831,12 @@ good enough, then stop the launch.
 
 ### Limitations
 
-- **No live obstacle sensor in Nav2.** There is no laser. Nav2 only knows the
-  obstacles that rtabmap has already put into `/map` (about once a second, and
-  only after the robot has moved a few centimetres). Something right in front
-  of the robot that rtabmap has not mapped yet is not avoided.
+- **Stereo blind zone.** Nothing closer than about 0.35 m in front of the
+  cameras is seen, and nothing behind or beside the robot. Obstacles that
+  appear inside that zone (or were never seen from further away) are only
+  caught by the bumper or the stuck check.
+- **No bumper yet.** Until MechaX adds the contact sensor, being stuck is only
+  detected from "pushing without moving", which takes about 2 s.
 - **Low obstacles and table tops.** The map only counts things between 5 cm
   and 40 cm high (`Grid/MaxGroundHeight`, `Grid/MaxObstacleHeight`). Very low
   objects are missed; the robot may drive under tables.
