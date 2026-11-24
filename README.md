@@ -120,7 +120,8 @@ Following video captured with 4x (original took 12 min for shown map) Speed and 
       <br><b>Apartment World Gazebo</b>
     </td>
     <td width="50%">
-      <video src="documents/videos/rviz_02.mp4" controls width="100%"></video>
+      <img src="documents/images/rviz_02.gif" width="100%">
+      <br><a href="documents/videos/rviz_02.mp4">full video (mp4)</a>
       <br><b>Stereo Eye SLAM Rviz</b>
     </td>
   </tr>
