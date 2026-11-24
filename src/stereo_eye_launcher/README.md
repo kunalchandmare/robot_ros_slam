@@ -22,12 +22,11 @@ stereo_eye_launcher/
 │   └── explore_params.yaml  # explore_lite settings for explore:=true
 ├── launch/
 │   └── launch.py      # the simulation + RTAB-Map + RViz launch file
-├── logs/              # run_sim.sh writes launch logs here
 ├── maps/              # explore:=true saves finished maps here
 ├── rviz/
 │   └── stereo_slam.rviz
 └── scripts/
-    ├── run_sim.sh            # launch and save the output to logs/
+    ├── run_sim.sh            # source the workspace and launch, in one command
     └── explore_map_saver.py  # saves the map when exploration is done
 ```
 
@@ -57,8 +56,8 @@ ros2 launch stereo_eye_launcher launch.py
 Sourcing `/workspaces/ros2-dev/install/setup.bash` is required so
 `FindPackageShare` can find the robot and world packages.
 
-To also save everything the launch prints, use the run script instead of the
-last line (see [Saving logs](#saving-logs)):
+Or use the run script, which sources the workspace and launches in one go
+(all output stays in the terminal):
 
 ```bash
 ./src/stereo_eye_launcher/scripts/run_sim.sh
@@ -115,7 +114,7 @@ crashes on the WSL D3D12 GPU driver with an Ogre `UnimplementedException` in
    (walls, sofa, bed, coffee table, kitchen counter, vanity) resolve.
 
 3. **Starts Gazebo** by including `gz_sim.launch.py` with
-   `gz_args = "-r -v 1 <world>"` (`-r` runs immediately, `-v 1` keeps logs quiet)
+   `gz_args = "-r -v 1 <world>"` (`-r` runs immediately, `-v 1` keeps Gazebo's messages short)
    and `on_exit_shutdown = true`, so closing Gazebo stops the whole launch.
    On Humble/Fortress this starts `ign gazebo`.
 
@@ -469,30 +468,16 @@ ros2 run rqt_robot_steering rqt_robot_steering
 ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -p speed:=0.15 -p turn:=0.4
 ```
 
-## Saving logs
+## Where the output goes
 
-To keep a copy of everything a launch prints, start the simulation with the run
-script instead of calling `ros2 launch` yourself. From `/workspaces/ros2-dev`:
+Everything the launch prints (Gazebo, rtabmap, Nav2, explore_lite, the map
+saver) shows up in the terminal where you started it; no log files are written
+by this package. Launch arguments pass straight through `run_sim.sh`, for
+example `./src/stereo_eye_launcher/scripts/run_sim.sh rviz:=false steering:=false`.
 
-```bash
-cd /workspaces/ros2-dev
-./src/stereo_eye_launcher/scripts/run_sim.sh
-```
-
-Launch arguments pass straight through, for example
-`./src/stereo_eye_launcher/scripts/run_sim.sh rviz:=false steering:=false`.
-The output still shows on screen as usual.
-
-The files end up in `/workspaces/ros2-dev/src/stereo_eye_launcher/logs/`:
-
-- `launch_<YYYY-mm-dd_HH-MM-SS>.log` holds the full screen output of that run
-  (stdout and stderr), one new file per run.
-- Each node's own ROS log files land there too, because the script sets
-  `ROS_LOG_DIR` to this folder.
-
-The script finds `logs/` relative to its own location and creates it if it is
-missing. The logs are plain text and are not gitignored, so you can commit one
-or attach it when asking for help with debugging.
+To keep a copy for asking for help, scroll up in the terminal and copy the
+text, or select all and copy (in most Linux terminals: Edit > Select All, then
+Ctrl+Shift+C).
 
 ## Quick checks after launch
 
@@ -555,10 +540,10 @@ ign service -s /world/apartment/control \
 
 If the simulation is paused afterwards, press the play button in Gazebo.
 
-**Where are the logs?** When you start with `run_sim.sh`, every run writes
-`launch_<date>_<time>.log` plus each node's own ROS logs to
-`/workspaces/ros2-dev/src/stereo_eye_launcher/logs/`. Send the newest
-`launch_*.log` when asking for help. See [Saving logs](#saving-logs).
+**Where do I see what went wrong?** Everything prints in the terminal where
+you started the launch. Scroll up to find the first red or yellow line (errors
+and warnings), or copy the whole terminal text and send it when asking for
+help. See [Where the output goes](#where-the-output-goes).
 
 ## Autonomous exploration (explore:=true)
 
@@ -665,7 +650,7 @@ terminal prints `Map saved: ...` when it is done.
 
 How "done" is detected: explore_lite publishes its state on `/explore/status`
 (`explore_lite_msgs/msg/ExploreStatus`). When it finds no frontiers left, it
-logs `No frontiers found, stopping.` or `All frontiers traversed/tried out,
+prints `No frontiers found, stopping.` or `All frontiers traversed/tried out,
 stopping.` and publishes `exploration_complete`. `explore_map_saver.py` waits
 for exactly that message, then runs `map_saver_cli`. You can watch it with:
 

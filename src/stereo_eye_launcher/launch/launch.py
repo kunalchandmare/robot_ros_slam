@@ -134,8 +134,8 @@ def generate_launch_description():
             description='Explore autonomously (Nav2 + explore_lite) and save the map if true; '
                         'turns off steering and teleop',
         ),
-        # Maps are written to the package source folder (like logs/), not to
-        # install/, so they survive a rebuild and are easy to find.
+        # Maps are written to the package source folder, not to install/,
+        # so they survive a rebuild and are easy to find.
         DeclareLaunchArgument(
             'maps_dir',
             default_value='/workspaces/ros2-dev/src/stereo_eye_launcher/maps',
