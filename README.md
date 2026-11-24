@@ -19,6 +19,13 @@ with RTAB-Map stereo SLAM on ROS 2 Humble.
 
 ## Quick start
 
+First time only, on Windows in the repo folder, download the
+`m-explore-ros2` submodule (frontier exploration source):
+
+```bash
+git submodule update --init
+```
+
 Inside the dev container, the repository root is the workspace
 `/workspaces/ros2-dev`:
 

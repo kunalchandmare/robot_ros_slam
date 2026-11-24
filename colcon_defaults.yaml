@@ -1,0 +1,7 @@
+# Default options for "colcon build" in this workspace.
+# The devcontainer points colcon here via the COLCON_DEFAULTS_FILE environment variable.
+build:
+  # From the m-explore-ros2 submodule we only need explore_lite (+ explore_lite_msgs).
+  # multirobot_map_merge is for multi-robot setups and needs extra dependencies.
+  packages-skip:
+    - multirobot_map_merge

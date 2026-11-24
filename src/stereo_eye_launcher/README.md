@@ -595,17 +595,25 @@ sudo apt install ros-humble-navigation2 ros-humble-nav2-bringup
 ```
 
 explore_lite has **no apt package for Humble** (it is not in the ROS Humble
-release list), so it is built from source in the workspace. The repo is
-<https://github.com/robo-friends/m-explore-ros2> (branch `main`). It contains
-two packages we need, `explore_lite` and `explore_lite_msgs`, plus
-`map_merge`, which we do not use. Ask the team where it should live (the
-Dockerfile or `src/`); building it by hand looks like this:
+release list), so it is built from source in the workspace. The source repo
+<https://github.com/robo-friends/m-explore-ros2> is a **git submodule** at
+`src/third_party/m-explore-ros2`, pinned to a fixed commit. Our repo only stores
+a link to it, not the code. It contains `explore_lite` and `explore_lite_msgs`
+(which we use) plus `multirobot_map_merge`, which `colcon_defaults.yaml` skips.
+
+Download it once (and again whenever the pinned commit changes). Run this on
+**Windows** in the repo folder, because git inside the container may be blocked
+by the company network:
 
 ```bash
-cd /workspaces/ros2-dev/src
-git clone https://github.com/robo-friends/m-explore-ros2.git
+git submodule update --init
+```
+
+The normal build then includes it, because `stereo_eye_launcher` depends on it:
+
+```bash
 cd /workspaces/ros2-dev
-colcon build --packages-up-to explore_lite stereo_eye_launcher
+colcon build --packages-up-to stereo_eye_launcher
 source install/setup.bash
 ```
 
