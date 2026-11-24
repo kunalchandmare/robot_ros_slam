@@ -22,21 +22,24 @@ with ROS 2 Humble). The robot has:
 
 - a **stereo camera** (two 640×360 cameras, 80 mm apart, 24 fps) used to
   estimate motion and to build a map
-- a short-range **time-of-flight (ToF)** ranger on the nose (0.01–0.30 m)
+- a short-range **time-of-flight (ToF)** ranger on the nose (0.01–1.0 m,
+  50° wide)
 - two drive wheels and two caster balls
 - an IMU (published, but not used by SLAM or Nav2 in the current launch)
 
 While it drives, **RTAB-Map** builds a 2D occupancy map from the stereo
-cameras. With `explore:=true`, **explore_lite** picks unexplored edges of that
-map (frontiers) and **Nav2** plans a path and drives there, slowly, until the
-apartment is mapped. The map is then saved as a `.pgm` picture plus a `.yaml`
-file.
+cameras. With `explore:=true`, a frontier explorer picks unexplored edges of
+that map and **Nav2** plans a path and drives there, slowly, until the
+apartment is mapped. The default explorer is **explore_lite**. Pass
+`explorer:=own` to use our own node **frontier_explorer** instead (see
+[section 9.6](#96-frontier_explorer-explorerown)). The map is then saved as
+a `.pgm` picture plus a `.yaml` file.
 
 The stack is:
 
 > Gazebo → `ros_gz_bridge` → RTAB-Map stereo odometry + SLAM
-> → Nav2 (planner + controller) → explore_lite, plus two helper nodes
-> (`stuck_recovery.py` and `explore_map_saver.py`).
+> → Nav2 (planner + controller) → explore_lite *or* frontier_explorer,
+> plus two helper nodes (`stuck_recovery.py` and `explore_map_saver.py`).
 
 Everything is started by `src/stereo_eye_launcher/scripts/run_sim.sh`.
 
@@ -123,7 +126,7 @@ only in the paths they own.
 |---|---|---|
 | `src/stereo_eye` | Robot model only: URDF/xacro, visuals, collisions, Gazebo camera / IMU / ToF / DiffDrive plugins | MechaX |
 | `src/apartment_gazebo` | The apartment world: walls, furniture, textures, lighting, sensor system plugins | Isekai |
-| `src/stereo_eye_launcher` | Launch file, Nav2 and explore_lite parameters, behaviour tree, RViz config, `run_sim.sh`, `stuck_recovery.py`, `explore_map_saver.py` | Bazooka |
+| `src/stereo_eye_launcher` | Launch file, Nav2 / explore_lite / frontier_explorer parameters, behaviour tree, RViz config, `run_sim.sh`, and the helper scripts `frontier_explorer.py`, `frontier_core.py`, `stuck_recovery.py`, `explore_map_saver.py` (all in `scripts/`) | Bazooka |
 | `src/third_party/m-explore-ros2` | Git submodule (commit `326cf8a`). Provides the `explore_lite` and `explore_lite_msgs` packages. `colcon_defaults.yaml` skips the unused `multirobot_map_merge` package. | upstream, pinned in this repo |
 | `src/camera_brightness` | Small node, started with the robot, that publishes the mean brightness of the left camera image | Kunal |
 | `.devcontainer/` | Docker image: ROS 2 Humble, Gazebo Fortress (`ros-humble-ros-gz`), RTAB-Map, Nav2, RViz, and a tf2 upgrade past 0.25.23 | Robocop |
@@ -154,7 +157,7 @@ Numbers are from `src/stereo_eye/urdf/stereo_eye.urdf.xacro` and
 | Stereo baseline | 0.080 m |
 | Camera resolution / rate / horizontal FOV | 640×360, 24 fps, 1.5 rad (~86°) |
 | Focal length `fx` (square pixels) | about 343.5 px |
-| ToF range / rate / field of view | 0.01–0.30 m, 20 Hz, 11×3 rays over 25° horizontal and ±1° vertical, 5.5 cm above the floor |
+| ToF range / rate / field of view | 0.01–1.0 m, 20 Hz, 21×3 rays over 50° horizontal and ±1° vertical, 5.5 cm above the floor |
 | DiffDrive command limits (Gazebo plugin) | ±0.3 m/s, ±1.0 rad/s, ±0.5 m/s², ±1.5 rad/s² |
 | Speeds used for driving and Nav2 | 0.15 m/s and 0.4 rad/s (well below the plugin limits, so visual odometry can keep up) |
 
@@ -181,7 +184,14 @@ Those openings are much wider than the robot. Nav2 is still tuned so a
 **tighter** gap of body width + 10 cm (0.356 m, 5 cm per side) stays
 passable; that is a design target, not the width of these apartment doors.
 Rooms have textured walls, floors and posters so the stereo cameras have
-features to track.
+features to track. The furniture (sofa, coffee table, kitchen counter, bed,
+vanity) also has high-contrast PBR textures (small PNG albedo maps in each
+model's `materials/textures/` folder): blue tweed on the sofa, walnut grain
+on the coffee table, speckled terrazzo on the counter, a cream quilted
+duvet with coloured dots on the bed, and grey-blue marble on the vanity.
+Only the look changed; sizes, positions and collisions are the same. The
+bed is still a solid box 1.6 m × 1.8 m × 0.5 m tall, with no legs or
+under-bed gap (see [section 10](#10-current-state-known-issues-and-roadmap)).
 
 ---
 
@@ -225,7 +235,8 @@ Declared in `src/stereo_eye_launcher/launch/launch.py`:
 | `teleop` | `false` | Start `teleop_twist_keyboard` in an xterm (also ignored when exploring) |
 | `render_engine` | `ogre` | Gazebo render engine (`ogre` or `ogre2`). `ogre` is required on WSL D3D12; `ogre2` crashes there |
 | `gz_gui` | `true` | Open the Gazebo window. `false` starts only the server (`-s`) |
-| `explore` | `false` | Start Nav2, explore_lite, the live obstacle cloud, stuck recovery and the map saver. Turns steering and teleop off |
+| `explore` | `false` | Start Nav2, a frontier explorer, the live obstacle cloud, stuck recovery and the map saver. Turns steering and teleop off |
+| `explorer` | `explore_lite` | Who picks frontiers when `explore:=true`: `explore_lite` (default) or `own` (`scripts/frontier_explorer.py`) |
 | `maps_dir` | `/workspaces/ros2-dev/src/stereo_eye_launcher/maps` | Where completed maps are written |
 | `map_name` | `apartment` | File-name prefix of the saved map |
 
@@ -272,7 +283,7 @@ topics). Conceptually the chain is:
    | `/tf` | Gazebo → ROS | DiffDrive `/wheel_tf` (`odom` → `base_footprint`) |
    | `/joint_states` | Gazebo → ROS | Wheel angles |
    | `/cmd_vel` | ROS → Gazebo | Wheel commands |
-   | `/front_tof` | Gazebo → ROS | `sensor_msgs/LaserScan`, 0.30 m ToF |
+   | `/front_tof` | Gazebo → ROS | `sensor_msgs/LaserScan`, 1.0 m ToF, 50° |
 
 6. **stereo_odometry** (`rtabmap_odom`) and **rtabmap** (`rtabmap_slam`).
    Images are already distortion-free, so `left/image_rect` and
@@ -289,7 +300,10 @@ topics). Conceptually the chain is:
      already provides `/map` and `map` → `vo`.
    - **stereo_obstacle_cloud** (`rtabmap_util point_cloud_xyzrgb`) publishes
      `/stereo/obstacle_cloud`.
-   - **explore_lite** (`explore` executable, node name `explore_node`).
+   - **explore_lite** (`explore` executable, node name `explore_node`),
+     unless `explorer:=own`, in which case **frontier_explorer.py** starts
+     instead (same `/explore/status`, `/explore/resume` and
+     `navigate_to_pose` interfaces).
    - **stuck_recovery.py**.
    - **explore_map_saver.py**.
 
@@ -303,8 +317,9 @@ installed path of `explore_navigate_to_pose.xml` into
 ## 6. The node and topic graph
 
 This is the graph with `explore:=true`. Manual steering uses the same
-`/cmd_vel` topic, but Nav2, explore_lite, the obstacle cloud, stuck
-recovery and the map saver are then absent.
+`/cmd_vel` topic, but Nav2, the frontier explorer, the obstacle cloud,
+stuck recovery and the map saver are then absent. Only one of
+explore_lite or frontier_explorer is started, according to `explorer`.
 
 ```mermaid
 flowchart TB
@@ -370,10 +385,11 @@ flowchart TB
     SM -->|"/cmd_vel"| BR
   end
 
-  EX["explore_lite"]
+  EX["explore_lite or frontier_explorer"]
   CM -->|"/global_costmap/costmap"| EX
   EX -->|"navigate_to_pose goals"| BTNAV
   EX -->|"/explore/status and /explore/frontiers"| RVIZ["RViz"]
+  EX -->|"/stuck_recovery/escape (explorer:=own only)"| SR
 
   SR["stuck_recovery"]
   TOF --> SR
@@ -381,7 +397,7 @@ flowchart TB
   SO --> SR
   CM --> SR
   SR -->|"pause or resume /explore/resume"| EX
-  SR -->|"/cmd_vel reverse 0.15 m"| BR
+  SR -->|"/cmd_vel reverse 0.15 m, plus a turn on ESCAPE"| BR
 
   SV["explore_map_saver"]
   EX -->|"/explore/status"| SV
@@ -392,9 +408,11 @@ flowchart TB
 A few details the diagram hides:
 
 - `/cmd_vel` has several writers, but not at the same time: Nav2's velocity
-  smoother during normal driving, `stuck_recovery.py` during a backup,
-  `explore_map_saver.py` during a start-up look-around turn, and
-  `rqt_robot_steering` / teleop only when `explore` is false.
+  smoother during normal driving, `stuck_recovery.py` during a backup (and
+  a short turn after an `[ESCAPE]`), `frontier_explorer.py` during its
+  start-up look-around (when `explorer:=own`), `explore_map_saver.py`
+  during a start-up look-around turn (when explore_lite stops too early),
+  and `rqt_robot_steering` / teleop only when `explore` is false.
 - The IMU is bridged and then unused.
 - `camera_brightness` reads `/stereo/left/image_raw` and publishes a string
   on `camera_brightness`. It is not on the navigation path.
@@ -506,15 +524,21 @@ This is the path a camera frame takes until the wheels turn, when
    - rtabmap's `/map` (static layer)
    - the live stereo cloud (obstacle layer; marks 10–40 cm above the floor,
      up to 2.5 m)
-   - on the **local** costmap only, `/front_tof` (0.025–0.30 m), which
-     covers the blind zone straight ahead
+   - `/front_tof` in **both** costmaps (0.025–1.0 m, marks from 2 cm above
+     the floor, kept for 20 s). The local costmap marks and clears; the
+     global costmap **marks only** (no ToF clearing, so unknown cells in
+     front of the robot stay unknown for frontier search). This covers the
+     stereo blind zone and furniture that stereo cannot yet see well.
    Then the inflation layer paints a soft safety margin around obstacles
    (see [section 9.3](#93-costmaps-robot-radius-and-inflation)).
 
-7. **explore_lite** looks at `/global_costmap/costmap` (not `/map` directly:
-   rtabmap only republishes `/map` when it changes, and explore_lite
-   does not use transient-local QoS). Every 10 s it scores frontiers and
-   sends the best centroid as a `navigate_to_pose` goal.
+7. The **frontier explorer** looks at `/global_costmap/costmap` (not `/map`
+   directly: rtabmap only republishes `/map` when it changes, and neither
+   explorer uses transient-local QoS). With the default explore_lite, every
+   10 s it scores frontiers and sends the best centroid as a
+   `navigate_to_pose` goal. With `explorer:=own`, frontier_explorer ranks
+   reachable frontiers by path length and sends a clear approach cell
+   instead (see [section 9.6](#96-frontier_explorer-explorerown)).
 
 8. **bt_navigator** runs `explore_navigate_to_pose.xml`. If the goal is
    already within 0.35 m it **fails** at once (so explore_lite blacklists
@@ -634,15 +658,23 @@ the gap.
 | `cost_scaling_factor` | 6.0 | Cost drops faster; narrower gaps look cheaper / more open | Cost stays high further out; more timid, paths hug the centre of rooms |
 | local `width` / `height` | 3 m × 3 m | Sees further for local collision checks, more CPU | May miss an obstacle just outside the window |
 | `track_unknown_space` (global) | `true` | — | Do not turn this off: frontiers need unknown cells to stay unknown |
-| `always_send_full_costmap` (global) | `true` | — | Do not turn this off: explore_lite can miss the first map if it only gets updates |
+| `always_send_full_costmap` (global) | `true` | — | Do not turn this off: both explorers can miss the first map if they only get updates |
 
 ### 9.4 Obstacle layers
 
 File: `nav2_params.yaml` obstacle_layer, plus the cloud node in `launch.py`.
 
-Local sources: `stereo_mark`, `stereo_clear`, `front_tof`.
-Global sources: `stereo_mark`, `stereo_clear` only (no ToF — the planner
-should not treat a 30 cm feeler as a long-range wall).
+Local and global sources are both `stereo_mark`, `stereo_clear`,
+`front_tof`. The ToF is now in the global costmap as well, so the planner
+routes around furniture the cameras have not mapped yet (plain boxes used
+to be invisible to the planner, and only the local costmap stopped the
+robot at the face). Two differences on the global ToF source: `clearing`
+is `False` (ToF clearing rays would turn unknown map cells into free space
+in front of the robot, which hides frontiers), and there is no ray-trace
+range. A global ToF mark lives 20 s, then stereo clearing can erase it.
+
+The sensor itself is 21×3 rays over 50° horizontal and ±1° vertical,
+0.01–1.0 m, 20 Hz, 5.5 cm above the floor (`src/stereo_eye/urdf/stereo_eye.urdf.xacro`).
 
 | Parameter | Current | If you raise it | If you lower it |
 |---|---|---|---|
@@ -650,7 +682,11 @@ should not treat a 30 cm feeler as a long-range wall).
 | stereo `max_obstacle_height` | 0.40 m | Marks taller things (table tops the robot can drive under) | May miss some obstacles |
 | stereo `obstacle_max_range` | 2.5 m | Marks further away (noisier stereo depth) | Reacts later |
 | ToF `obstacle_min_range` | 0.025 m | Ignores more of the nearest band (those hits already fall inside the 0.15 m footprint) | Can accept Gazebo clamp artefacts at `range_min` (0.01 m) as a fake wall |
-| ToF `obstacle_max_range` | 0.30 m | ToF would need a matching change in the xacro (`tof_max_range`) | Re-opens part of the stereo blind zone |
+| ToF `obstacle_max_range` | 1.0 m | Needs a matching change in the xacro (`tof_max_range`); marks further than the sensor can see are unused | Re-opens part of the stereo blind zone |
+| ToF `min_obstacle_height` | 0.02 m | Ignores more of the lower band (the beam is 5.5 cm ± 1°, so real hits are above 2 cm) | Floor hits can become long-lived phantom obstacles (they last 20 s) |
+| ToF `observation_persistence` | 20.0 s | Marks last longer after the robot turns away (helps on furniture stereo still sees poorly) | Marks vanish sooner and stereo rays may wipe a real box face |
+| local ToF `clearing` / `raytrace_max_range` | `True` / 1.05 m | Clears a little past the 1.0 m beam | Leaves stale local ToF marks |
+| global ToF `clearing` | `False` | Do not turn this on: it would paint unknown cells in front of the robot as free and hide frontiers | — |
 | cloud `max_depth` (launch.py) | 3.0 m | Longer, noisier cloud | Shorter feeler |
 | cloud `voxel_size` | 0.05 m | Sparser marks | Denser cloud, more CPU |
 | cloud `noise_filter_min_neighbors` | 5 | Drops more isolated points (can also drop thin real objects) | More stereo speckles become obstacles |
@@ -673,8 +709,10 @@ only steps to a neighbour whose cost is `<=` the current cell, so inflated
 cells act like walls for the frontier search. With `inflation_radius` 0.35 m a
 narrow doorway can hide the next room and explore_lite may report "No
 frontiers found, stopping." too early. A one-line patch for this was tried on
-Nov 24, 2026 and reverted because it made navigation worse; our own
-exploration node is planned instead.
+Nov 24, 2026 and reverted because it leaked through gaps in mapped walls and
+sent the robot outside the apartment. The workaround is our own explorer:
+start with `explore:=true explorer:=own` (see [section 9.6](#96-frontier_explorer-explorerown)).
+explore_lite itself is unchanged (submodule `326cf8a`).
 
 This version (submodule `326cf8a`) ranks frontiers as:
 
@@ -710,7 +748,98 @@ still triggers a new choice immediately.
 Blacklisting is hard-coded as "within 5 cells" (5 × 0.025 = 0.125 m).
 Changing that needs a patch in the submodule, not a parameter.
 
-### 9.6 Behaviour-tree recoveries
+### 9.6 frontier_explorer (`explorer:=own`)
+
+Files: `src/stereo_eye_launcher/scripts/frontier_explorer.py` and
+`frontier_core.py`. Settings:
+`src/stereo_eye_launcher/config/frontier_explorer_params.yaml`.
+The scripts live in the launcher package's `scripts/` folder (installed by
+`CMakeLists.txt` so `ros2 run` can find them); there is no extra package.
+
+This node starts **instead of** explore_lite when you pass
+`explore:=true explorer:=own`. The default is still `explorer:=explore_lite`,
+so nothing changes unless you ask for it. It keeps the same interfaces
+(`/explore/status`, `/explore/resume`, the `navigate_to_pose` action), so
+`stuck_recovery.py` and `explore_map_saver.py` work with either explorer.
+
+It was written to avoid two explore_lite problems: (1) the doorway search
+limit above, and (2) goals at a frontier centroid, which can sit inside
+inflation or even outside the building when the map has a small hole in a
+wall.
+
+What it does, in order:
+
+1. **Reachable cells only.** It searches only cells the robot can actually
+   drive to. The robot centre must stay at least 0.18 m from every wall
+   cell (`min_passage_width` 0.36 m = body 0.256 m + 5 cm per side). A
+   0.25–0.30 m hole in a mapped wall is never treated as a door. Steps
+   closer to a wall than `comfortable_clearance` (0.30 m) count
+   `(1 + narrow_penalty)` times on the path (`narrow_penalty` 2.0), so a
+   wide doorway wins over a barely-wide-enough gap.
+2. **Approach-cell goals, never the centroid.** The goal is a clear cell at
+   most `approach_radius` 0.60 m from the frontier, with published cost
+   below `approach_max_cost` 50 (about 0.27 m or more from walls), and with
+   at least 60 % of a 0.25 m neighbourhood known free (`min_free_ratio`,
+   `free_check_radius`). Unknown patches completely within
+   `ignore_near_robot` 0.45 m of the robot (the stereo blind zone, and
+   cells under the body) are not frontiers.
+3. **Ranking by path length.** The score is
+   `path length − size_gain × frontier length`, with length counted at
+   most `size_cap` 2.0 m and `size_gain` 1.0. It keeps the current goal
+   unless another scores `switch_margin` 1.5 better, so it does not hop
+   between similar frontiers. It re-checks every `replan_period` 3.0 s,
+   and gives up a goal when the path to it has not shortened by
+   `progress_min` 0.10 m in `progress_timeout` 30 s. A goal closer than
+   `min_goal_distance` 0.25 m counts as reached.
+4. **Blacklist areas, with backoff.** A failed goal blacklists a
+   `blacklist_radius` 0.5 m area for `blacklist_time` 60 s; the time
+   doubles on every repeat there (next 120 s), and the third failure in
+   the same area is permanent (`blacklist_max_failures` 3). Reaching a
+   frontier `visit_limit` 2 times without it disappearing also blacklists
+   it (the robot cannot see that edge from there).
+5. **Look around first.** Until the costmap knows `min_known_area_m2`
+   10.0 m², the robot turns on the spot at `look_around_speed` 0.3 rad/s
+   for `look_around_angle` 6.28 rad (one full turn, about 21 s), then
+   stands still for `look_around_settle` 2.0 s so rtabmap can catch up.
+   At most `max_look_arounds` 2, including when no frontier is left but
+   the map is still small.
+6. **Escape.** After `escape_after_aborts` 2 aborted goals in a row while
+   the robot moved less than `escape_motion` 0.10 m (for example the
+   controller keeps saying "collision ahead"), it publishes a reason on
+   `/stuck_recovery/escape`. `stuck_recovery.py` then backs up 0.15 m and
+   turns `escape_turn_angle` 0.8 rad (~46°) toward the clearer side. At
+   most one escape every `escape_cooldown` 30 s. Log lines use the
+   prefixes `[EXPLORER]` and `[ESCAPE]`.
+7. **RViz markers** on `/explore/frontiers` when `visualize` is true:
+   frontier cells as blue points 0.06 m across, candidate goals as green
+   spheres 0.25 m, the current goal as an orange sphere 0.35 m, and
+   blacklisted areas as grey cylinders of diameter 1.0 m
+   (2 × `blacklist_radius`).
+
+An optional geofence in the map frame (`geofence_enabled`, default
+`false`) can keep goals inside `x` −4.0..6.0, `y` −5.5..2.5, which matches
+the apartment when the robot is spawned at the default (4.0, 5.5). It is
+off because those numbers are wrong for any other spawn.
+
+You can try a change offline before a simulation run:
+
+```bash
+python3 src/stereo_eye_launcher/test/test_frontier_selection.py
+```
+
+| Parameter | Current | If you raise it | If you lower it |
+|---|---|---|---|
+| `min_passage_width` | 0.36 m | More clearance; some real doorways may be treated as blocked | May treat a hole in a mapped wall as a door and leave the apartment |
+| `approach_max_cost` | 50 | Goals stay further from walls (may find no approach cell at a tight frontier) | Goals can sit closer to inflation / walls |
+| `approach_radius` | 0.60 m | Goals may be further from the unknown edge (safer, less information) | Goals sit closer to the frontier (more likely inside inflation) |
+| `size_gain` / `size_cap` | 1.0 / 2.0 m | Prefers larger frontiers more (cap stops a huge wall edge from winning everything) | Prefers a short path more strongly |
+| `switch_margin` | 1.5 | Sticks to the current goal more firmly | Hops to a slightly cheaper frontier more often |
+| `replan_period` | 3.0 s | Re-ranks less often | Re-ranks more often (more CPU, more goal changes) |
+| `blacklist_radius` / `blacklist_time` | 0.5 m / 60 s | A failure blocks a larger area, or for longer | The same failed spot can be chosen again sooner |
+| `min_known_area_m2` | 10.0 m² | Longer look-around at start | May start chasing a ragged first view sooner |
+| `escape_after_aborts` / `escape_motion` | 2 / 0.10 m | Harder to request an escape | Asks stuck_recovery for help sooner |
+
+### 9.7 Behaviour-tree recoveries
 
 File: `src/stereo_eye_launcher/behavior_trees/explore_navigate_to_pose.xml`.
 `bt_navigator.goal_reached_tol` (0.35 m) lives in `nav2_params.yaml`.
@@ -742,20 +871,22 @@ Spin and BackUp are **not** in this tree. They are still loaded in
 | `Wait wait_duration` | 2 s | Longer pause during recovery (for a fake stereo obstacle to clear) |
 | `reset_distance` on `ClearCostmapExceptRegion` | 1.5 m | Smaller values wipe obstacles closer to the robot and can erase a wall in the stereo blind zone |
 
-### 9.7 stuck_recovery thresholds
+### 9.8 stuck_recovery thresholds
 
 File: `src/stereo_eye_launcher/scripts/stuck_recovery.py` (defaults in
 `declare_parameter`). `launch.py` only overrides `tof_topic` (`/front_tof`)
 and `tof_too_close_m` (0.04). The node runs only when `explore:=true`, and
 it only acts while `/explore/status` is `started` or `in progress`.
 
-Three triggers:
+Four triggers (the first three are unchanged; `[ESCAPE]` is only used with
+`explorer:=own`):
 
 | Tag | When it fires | What it does |
 |---|---|---|
 | `[TOO CLOSE]` | A finite ToF reading above `range_min + 0.005` m and below 0.04 m, **and** `/cmd_vel` has `linear.x > 0.02` m/s in the last 0.5 s | Stop, blacklist the frontier, back up 0.15 m, no turn |
 | `[STUCK]` | `/cmd_vel` has asked to drive forward faster than 0.08 m/s for 5 s, and visual odometry (`/odom`) moved less than 5 cm | Same as above |
 | `[NO PATH]` | The robot centre has sat on a global-costmap cell of published cost ≥ 99 (inscribed or lethal) for 3 s | Move 0.15 m toward the clearer side (forward or back). Does **not** blacklist the frontier |
+| `[ESCAPE]` | A message on `/stuck_recovery/escape` (`std_msgs/String`, the text is the reason), sent by frontier_explorer after two aborted goals in a row with almost no motion | Like `[NO PATH]`, but after the 0.15 m backup it also turns 0.8 rad (~46°) on the spot toward the clearer side. It does not swap the Nav2 goal (the explorer has already blacklisted that area). Ignored while a recovery or its cooldown is running. explore_lite never publishes this topic |
 
 Readings of exactly `range_min` (0.01 m) are ignored (Gazebo clamp
 artefact). Standing still or turning next to a wall never triggers
@@ -773,13 +904,17 @@ wheels still "move" in `/wheel_odom`.
 | `cooldown` | 10 s | Longer pause after a recovery | Can fire again sooner |
 | `repeat_radius` / `repeat_window` | 0.5 m, 120 s | More events count as a repeat (backup grows 50 % each time, up to 0.3 m; cooldown doubles, up to 40 s) | Fewer events count as a repeat |
 | `treat_lost_odom_as_stuck` | `false` | A silent `/odom` during a push also counts as stuck | — |
+| `escape_topic` | `/stuck_recovery/escape` | — | Must match frontier_explorer's `escape_topic` |
+| `escape_turn_angle` / `escape_turn_speed` | 0.8 rad (~46°) / 0.4 rad/s | A larger turn after an escape (can lose visual odometry if too fast) | A smaller nudge; may still face the same obstacle |
+| `escape_probe` | 0.2 m | Looks further ahead/behind when choosing the turn side | Uses a closer cell to decide the turn |
 
-### 9.8 Map saver
+### 9.9 Map saver
 
 File: `src/stereo_eye_launcher/scripts/explore_map_saver.py`. Defaults are
 in the script; `launch.py` passes `maps_dir` and `map_name`.
 
-When explore_lite publishes `exploration_complete` on `/explore/status`,
+When the explorer (explore_lite or frontier_explorer) publishes
+`exploration_complete` on `/explore/status`,
 the node runs `nav2_map_server map_saver_cli` on `/map` and writes
 `maps_dir/map_name_<YYYY-mm-dd_HH-MM-SS>.pgm` and `.yaml`.
 
@@ -798,7 +933,7 @@ ros2 run nav2_map_server map_saver_cli -t /map \
   --ros-args -p save_map_timeout:=10.0
 ```
 
-### 9.9 Sending a manual goal
+### 9.10 Sending a manual goal
 
 Nav2 only runs when `explore:=true`. explore_lite will **overwrite** a
 manual goal on its next re-rank (every 10 s, or sooner if the current goal
@@ -834,13 +969,13 @@ start again **without** `explore:=true`. Steering is disabled during
 exploration on purpose: `rqt_robot_steering` publishes `/cmd_vel` all the
 time (zero when the sliders are centred) and would fight Nav2.
 
-### 9.10 Pause and resume exploration
+### 9.11 Pause and resume exploration
 
 ```bash
-# Pause (explore_lite stops sending goals; stuck_recovery also goes idle)
+# Pause (the explorer stops sending goals; stuck_recovery also goes idle)
 ros2 topic pub --once /explore/resume std_msgs/msg/Bool "{data: false}"
 
-# Resume (also restarts explore_lite after it has stopped by itself)
+# Resume (also restarts the explorer after it has stopped by itself)
 ros2 topic pub --once /explore/resume std_msgs/msg/Bool "{data: true}"
 
 # Watch the state: started, in progress, complete, ...
@@ -858,11 +993,19 @@ Each time exploration finishes again, a new time-stamped map is saved.
 - The robot builds a 2D map with RTAB-Map stereo SLAM while driving in the
   apartment.
 - With `explore:=true` it chooses frontiers and drives itself (NavFn +
-  Regulated Pure Pursuit), including through the apartment doorways.
+  Regulated Pure Pursuit), including through the apartment doorways. The
+  default explorer is explore_lite; `explorer:=own` starts frontier_explorer
+  instead.
+- The front ToF is 50° wide and 1.0 m long, and is used in both Nav2
+  costmaps (global marks only, 20 s persistence).
+- Furniture has high-contrast PBR textures so stereo depth has features
+  to match.
+- The Dockerfile upgrades tf2 to 0.25.24 or newer on a container rebuild
+  (see below if your image is older).
 - Logs of each `run_sim.sh` run are in `logs/latest.log`.
 - A completed map is written under `src/stereo_eye_launcher/maps/`.
 
-### Known issues
+### Known issues and limits
 
 - **tf2 0.25.23 deadlock.** Humble tf2 0.25.23 can freeze Nav2's TF
   buffers (ros2/geometry2 #990, fixed in 0.25.24). The symptom is that
@@ -883,34 +1026,47 @@ Each time exploration finishes again, a new time-stamped map is saved.
 - **Occasional mid-navigation stuck.** The robot now drives, but it can
   still stop mid-run (plan visible, little or no motion). That is being
   investigated separately from this document. Check `logs/latest.log` for
-  `[TOO CLOSE]`, `[STUCK]`, `[NO PATH]`, `collision ahead`, progress-checker
-  aborts, and explore_lite blacklists.
+  `[TOO CLOSE]`, `[STUCK]`, `[NO PATH]`, `[ESCAPE]`, `collision ahead`,
+  progress-checker aborts, and explorer blacklists.
 
-- **Goal choice is simple.** explore_lite picks the cheapest frontier by
-  distance and size, with no heading term and no hysteresis. Improving
-  that is useful, but it is not the current priority.
+- **explore_lite at doorways.** Stock frontier search will not spread
+  through inflated cells, so a doorway can hide the next room (see
+  [section 9.5](#95-explore_lite-frontier-parameters)). The workaround is
+  `explorer:=own`. explore_lite's own goal choice is still simple
+  (nearest / largest open edge, no hysteresis).
+
+- **The bed maps as a wall.** The bed is a solid box 1.6 m × 1.8 m ×
+  0.5 m tall, with no legs or gap underneath. Stereo, ToF and rtabmap
+  therefore mark its whole outline as an obstacle, which is physically
+  correct for this 0.15 m-radius robot. This is kept as it is for now.
 
 - **Stereo limits.** Nothing closer than about 0.35 m in front of the
   cameras is seen, and nothing behind or beside the robot. Low objects
-  under 10 cm are ignored by the stereo obstacle layer (the ToF only looks
-  straight ahead). Plain walls and fast turns still make visual odometry
-  weak.
+  under 10 cm are ignored by the stereo obstacle layer. The ToF covers
+  50° ahead, out to 1.0 m, at 5.5 cm above the floor; it still does not
+  see to the sides or behind. Plain walls and fast turns still make
+  visual odometry weak.
 
-### Next goal: an RL local navigation policy
+### Next goals
 
-Once the current goal is done (reliable autonomous exploration of this
-apartment, including getting unstuck), the planned next step is a
-**learned local navigation policy**:
+- **Faster mapping, on a separate branch.** Mapping this apartment still
+  takes around 10 minutes, even though the map is 2D. Speeding that up
+  (without changing the current exploration behaviour on this branch) is
+  a planned performance goal and will be done on its own branch. It has
+  not started yet.
 
-- Train with **Stable-Baselines3** in this Gazebo apartment.
-- Inputs: the front ToF scan and stereo depth (not a replacement for
-  SLAM or frontier selection).
-- Output: `/cmd_vel`.
-- It would replace **only** Nav2's controller (Regulated Pure Pursuit).
-  The planner, explore_lite, the costmaps and the ToF "too close" stop in
-  `stuck_recovery.py` stay as the safety net.
+- **A learned local navigation policy**, once reliable autonomous
+  exploration of this apartment (including getting unstuck) is done:
 
-That work has not started yet.
+  - Train with **Stable-Baselines3** in this Gazebo apartment.
+  - Inputs: the front ToF scan and stereo depth (not a replacement for
+    SLAM or frontier selection).
+  - Output: `/cmd_vel`.
+  - It would replace **only** Nav2's controller (Regulated Pure Pursuit).
+    The planner, the frontier explorer, the costmaps and the ToF "too
+    close" stop in `stuck_recovery.py` stay as the safety net.
+
+  That work has not started yet.
 
 ### Suggested first checks in a new terminal
 

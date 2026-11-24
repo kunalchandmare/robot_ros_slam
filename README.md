@@ -5,15 +5,18 @@ This project aims to build a simple robot using ROS 2 with Simultaneous Localiza
 Today the project simulates a small two-wheeled robot with a stereo camera
 (`stereo_eye`) driving around an apartment in Gazebo Fortress, and builds a map
 with RTAB-Map stereo SLAM on ROS 2 Humble. With `explore:=true` the robot also
-drives itself: explore_lite picks unexplored frontiers and Nav2 follows a path
-to them. How that stack is wired, and which file and parameter control planning
-and navigation, is in [documents/stereo_architecture.md](documents/stereo_architecture.md).
+drives itself: a frontier explorer picks unexplored edges of the map and Nav2
+follows a path to them. The default explorer is explore_lite; pass
+`explorer:=own` to use our own `frontier_explorer` node instead. How that
+stack is wired, and which file and parameter control planning and navigation,
+is in [documents/stereo_architecture.md](documents/stereo_architecture.md).
 
 ## Current status
 
 **What works.** The robot maps the apartment and, after the tf2 upgrade
 described below, drives autonomously with
-`explore:=true`. Completed maps are written under
+`explore:=true`. The default explorer is explore_lite; `explorer:=own` starts
+our own frontier_explorer instead. Completed maps are written under
 `src/stereo_eye_launcher/maps/`. Each `run_sim.sh` run is also saved as
 `logs/latest.log` (the previous run is kept as `logs/previous.log`).
 
@@ -28,15 +31,19 @@ described below, drives autonomously with
   `run_sim.sh` warns if it still finds 0.25.23.
 - The robot can still **get stuck mid-navigation** sometimes (a plan is
   visible, but it does not move). That is being investigated.
-- Frontier **goal choice** is simple (nearest / largest open edge). Making it
-  smarter is planned, but not the current priority.
+- Stock **explore_lite can stop at a doorway** (its frontier search will not
+  spread through inflated cells). The workaround is `explorer:=own`. The bed
+  is a solid 0.5 m-tall box, so it maps as a wall; that is kept as it is for
+  now.
 
 **Roadmap.** The current goal is reliable autonomous exploration of this
-apartment, including getting unstuck. The next goal after that is a learned
-local navigation policy (Stable-Baselines3, trained in Gazebo, ToF + stereo
-depth → `/cmd_vel`) that would replace only Nav2's controller. The planner,
-explore_lite and the ToF safety stop would stay. That work has not started
-yet. Details are in the [architecture document](documents/stereo_architecture.md#10-current-state-known-issues-and-roadmap).
+apartment, including getting unstuck. Speeding up mapping (around 10 minutes
+for this apartment today) is a planned performance goal and will be done on
+a separate branch. After the current goal, a learned local navigation policy
+(Stable-Baselines3, trained in Gazebo, ToF + stereo depth → `/cmd_vel`) would
+replace only Nav2's controller. The planner, the frontier explorer and the
+ToF safety stop would stay. Those next pieces have not started yet. Details
+are in the [architecture document](documents/stereo_architecture.md#10-current-state-known-issues-and-roadmap).
 
 ## Packages
 
@@ -44,7 +51,7 @@ yet. Details are in the [architecture document](documents/stereo_architecture.md
 |---|---|---|---|
 | `src/stereo_eye` | Robot description (URDF/xacro): body, wheels, stereo cameras, IMU, Gazebo plugins | MechaX (robot design) | [README](src/stereo_eye/README.md) |
 | `src/apartment_gazebo` | Gazebo world: the apartment, its models and system plugins | Isekai (world design) | [README](src/apartment_gazebo/README.md) |
-| `src/stereo_eye_launcher` | Launch package: Gazebo, bridge, stereo odometry, RTAB-Map, Nav2, explore_lite, RViz, driving, log script | Bazooka (launch files) | [README](src/stereo_eye_launcher/README.md) |
+| `src/stereo_eye_launcher` | Launch package: Gazebo, bridge, stereo odometry, RTAB-Map, Nav2, explore_lite or frontier_explorer, RViz, driving, helper scripts, log script | Bazooka (launch files) | [README](src/stereo_eye_launcher/README.md) |
 | `src/third_party/m-explore-ros2` | Git submodule: `explore_lite` (frontier exploration) and `explore_lite_msgs`, pinned at commit `326cf8a` | upstream, pinned here | [README](src/third_party/m-explore-ros2/README.md) |
 | `src/camera_brightness` | Small node that reports the left camera image brightness | Kunal | none yet |
 | `.devcontainer/` | Docker development container with ROS 2 Humble and all dependencies | Robocop (CTO) | [setup notes](documents/ROS_Docker_Container_Setup.md) |
@@ -74,7 +81,7 @@ source install/setup.bash
 ./src/stereo_eye_launcher/scripts/run_sim.sh explore:=true gz_gui:=false
 ```
 
-`explore:=true` starts Nav2 and explore_lite, so the robot drives itself.
+`explore:=true` starts Nav2 and a frontier explorer (explore_lite by default; add `explorer:=own` for frontier_explorer), so the robot drives itself.
 `gz_gui:=false` starts only the Gazebo server (no Gazebo window). That avoids
 the WSL GPU running out of memory and taking the whole launch down. RViz still
 opens and shows the robot, the cameras and the map.
