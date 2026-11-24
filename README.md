@@ -7,7 +7,7 @@ Today the project simulates a small two-wheeled robot with a stereo camera
 with RTAB-Map stereo SLAM on ROS 2 Humble. With `explore:=true` the robot also
 drives itself: explore_lite picks unexplored frontiers and Nav2 follows a path
 to them. How that stack is wired, and which file and parameter control planning
-and navigation, is in [documents/ARCHITECTURE.md](documents/ARCHITECTURE.md).
+and navigation, is in [documents/stereo_architecture.md](documents/stereo_architecture.md).
 
 ## Current status
 
@@ -36,7 +36,7 @@ apartment, including getting unstuck. The next goal after that is a learned
 local navigation policy (Stable-Baselines3, trained in Gazebo, ToF + stereo
 depth → `/cmd_vel`) that would replace only Nav2's controller. The planner,
 explore_lite and the ToF safety stop would stay. That work has not started
-yet. Details are in the [architecture document](documents/ARCHITECTURE.md#10-current-state-known-issues-and-roadmap).
+yet. Details are in the [architecture document](documents/stereo_architecture.md#10-current-state-known-issues-and-roadmap).
 
 ## Packages
 
@@ -47,9 +47,9 @@ yet. Details are in the [architecture document](documents/ARCHITECTURE.md#10-cur
 | `src/stereo_eye_launcher` | Launch package: Gazebo, bridge, stereo odometry, RTAB-Map, Nav2, explore_lite, RViz, driving, log script | Bazooka (launch files) | [README](src/stereo_eye_launcher/README.md) |
 | `src/third_party/m-explore-ros2` | Git submodule: `explore_lite` (frontier exploration) and `explore_lite_msgs`, pinned at commit `326cf8a` | upstream, pinned here | [README](src/third_party/m-explore-ros2/README.md) |
 | `src/camera_brightness` | Small node that reports the left camera image brightness | Kunal | none yet |
+| `patches/` | Local patches for the `m-explore-ros2` submodule (frontier search through inflated doorways) | Robocop | [apply_patches.sh](patches/apply_patches.sh) |
 | `.devcontainer/` | Docker development container with ROS 2 Humble and all dependencies | Robocop (CTO) | [setup notes](documents/ROS_Docker_Container_Setup.md) |
-| `documents/` | Project documentation, including the system architecture | Robocop | [ARCHITECTURE.md](documents/ARCHITECTURE.md) |
-| `battery_node_demo/` | Practice project, see below | Kunal | [README](battery_node_demo/README.md) |
+| `documents/` | Stereo Eye documentation, including the system architecture | Robocop | [stereo_architecture.md](documents/stereo_architecture.md) |
 
 ## Quick start
 
@@ -77,9 +77,12 @@ source install/setup.bash
 
 `run_sim.sh` first applies our patches to third-party code (`patches/`, see
 [patches/apply_patches.sh](patches/apply_patches.sh)) and, if a patch is newer
-than the build, rebuilds `explore_lite` by itself. To do it by hand before a
-`colcon build`: `bash patches/apply_patches.sh` (safe to run again; it prints
-`applied now` or `already applied`, or an `ERROR`).
+than the build, rebuilds `explore_lite` by itself. The current patch
+(`patches/m-explore-ros2/0001-frontier-search-through-inflated-cells.patch`)
+lets explore_lite's frontier search walk through inflated but passable
+doorways, so exploration does not stop at a room entrance. To apply it by
+hand before a `colcon build`: `bash patches/apply_patches.sh` (safe to run
+again; it prints `applied now` or `already applied`, or an `ERROR`).
 
 `explore:=true` starts Nav2 and explore_lite, so the robot drives itself.
 `gz_gui:=false` starts only the Gazebo server (no Gazebo window). That avoids
@@ -105,18 +108,7 @@ in the container). The previous run is kept as `logs/previous.log`.
 
 The [launcher README](src/stereo_eye_launcher/README.md) explains every
 launch argument, the TF tree, driving, exploration and troubleshooting.
-The [architecture document](documents/ARCHITECTURE.md) explains the node
+The [architecture document](documents/stereo_architecture.md) explains the node
 graph and how to tune planning and navigation.
 
-## Practice project: `battery_node_demo`
-
-`battery_node_demo/` is a small practice project for learning ROS 2 package structure, node execution, and topic-based communication before developing the robot and SLAM system. It is an example, not the SLAM implementation.
-
-It contains two independent ROS 2 packages:
-
-- `battery_python`: Python publisher and processor.
-- `battery_cpp`: C++ listener.
-
-The repository root is the ROS 2 workspace root. The `battery_node_demo/` directory groups these packages; it is not itself a ROS package.
-
-For the practice project, see [its README](battery_node_demo/README.md) for build and run instructions and [its learning notes](battery_node_demo/LEARNING_NOTES.md) for explanations. See [documents/ROS_Build_Guide.md](documents/ROS_Build_Guide.md) for the repository's package/build overview and [documents/ROS_Setup_Cariad.md](documents/ROS_Setup_Cariad.md) for the ROS 2 Humble development environment setup.
+See [documents/ROS_Build_Guide.md](documents/ROS_Build_Guide.md) for the repository's package/build overview and [documents/ROS_Setup_Cariad.md](documents/ROS_Setup_Cariad.md) for the ROS 2 Humble development environment setup.
