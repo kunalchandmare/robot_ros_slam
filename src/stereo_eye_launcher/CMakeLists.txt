@@ -7,9 +7,12 @@ find_package(ament_cmake REQUIRED)
 # behavior_trees/ the Nav2 behaviour tree used for exploration goals.
 install(DIRECTORY launch rviz config behavior_trees DESTINATION share/${PROJECT_NAME})
 
-# Map saver for explore:=true, run with "ros2 run stereo_eye_launcher
+# Helper nodes for explore:=true, run with e.g. "ros2 run stereo_eye_launcher
 # explore_map_saver.py". Maps are written to the source tree's maps/ folder
 # (launch arg maps_dir), so maps/ itself is not installed.
-install(PROGRAMS scripts/explore_map_saver.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS
+  scripts/explore_map_saver.py   # saves the map when exploration is done
+  scripts/stuck_recovery.py      # backs up and turns when the robot is stuck
+  DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

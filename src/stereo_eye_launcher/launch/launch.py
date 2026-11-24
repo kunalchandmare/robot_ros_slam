@@ -607,6 +607,25 @@ def generate_launch_description():
         condition=IfCondition(explore),
     )
 
+    # Stuck watchdog (explore:=true only): notices a bumper contact, or /cmd_vel
+    # asking to drive while visual odometry (/odom) does not move, then makes
+    # explore_lite give up that frontier, backs up 0.2 m, turns ~90 degrees
+    # and lets exploration continue. All thresholds are parameters of the node
+    # (see the header of scripts/stuck_recovery.py). The bumper topic is not
+    # bridged yet: it waits for MechaX's Gazebo contact sensor (README).
+    stuck_recovery = Node(
+        package='stereo_eye_launcher',
+        executable='stuck_recovery.py',
+        name='stuck_recovery',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'bumper_topic': '/bumper',
+            'bumper_type': 'contacts',   # contacts | bool | none
+        }],
+        condition=IfCondition(explore),
+    )
+
     # Saves /map with nav2_map_server's map_saver_cli as soon as explore_lite
     # publishes "exploration_complete" on /explore/status.
     map_saver = Node(
@@ -639,5 +658,6 @@ def generate_launch_description():
         nav2,
         stereo_obstacle_cloud,
         explore_lite,
+        stuck_recovery,
         map_saver,
     ])
