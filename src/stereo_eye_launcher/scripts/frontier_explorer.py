@@ -571,8 +571,8 @@ class FrontierExplorer(Node):
         pts = Marker()
         pts.header.frame_id, pts.header.stamp = frame, stamp
         pts.ns, pts.id, pts.type = 'frontiers', 0, Marker.POINTS
-        pts.scale.x = pts.scale.y = grid.resolution * 2
-        pts.color = ColorRGBA(r=0.0, g=0.9, b=0.0, a=1.0)
+        pts.scale.x = pts.scale.y = 0.06       # (m) frontier cells, blue like explore_lite
+        pts.color = ColorRGBA(r=0.0, g=0.2, b=1.0, a=1.0)
         pts.pose.orientation.w = 1.0
         for c in cands:
             for r, col in c.cells[::2]:
@@ -580,9 +580,11 @@ class FrontierExplorer(Node):
                 pts.points.append(Point(x=x, y=y, z=0.05))
         arr.markers.append(pts)
         nid = 1
-        targets = [(c.goal, ColorRGBA(r=0.6, g=0.9, b=0.6, a=0.8), 0.08) for c in cands]
+        # Candidate goals: green spheres (as explore_lite showed them);
+        # the goal being driven to: bigger, bright orange.
+        targets = [(c.goal, ColorRGBA(r=0.2, g=0.8, b=0.2, a=0.7), 0.25) for c in cands]
         if self.goal is not None:
-            targets.append((self.goal.goal, ColorRGBA(r=0.1, g=0.3, b=1.0, a=1.0), 0.15))
+            targets.append((self.goal.goal, ColorRGBA(r=1.0, g=0.5, b=0.0, a=1.0), 0.35))
         for (x, y), color, size in targets:
             m = Marker()
             m.header.frame_id, m.header.stamp = frame, stamp
