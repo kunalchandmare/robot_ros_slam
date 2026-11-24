@@ -124,9 +124,8 @@ only in the paths they own.
 | `src/stereo_eye` | Robot model only: URDF/xacro, visuals, collisions, Gazebo camera / IMU / ToF / DiffDrive plugins | MechaX |
 | `src/apartment_gazebo` | The apartment world: walls, furniture, textures, lighting, sensor system plugins | Isekai |
 | `src/stereo_eye_launcher` | Launch file, Nav2 and explore_lite parameters, behaviour tree, RViz config, `run_sim.sh`, `stuck_recovery.py`, `explore_map_saver.py` | Bazooka |
-| `src/third_party/m-explore-ros2` | Git submodule (commit `326cf8a`). Provides the `explore_lite` and `explore_lite_msgs` packages. `colcon_defaults.yaml` skips the unused `multirobot_map_merge` package. A local patch in `patches/m-explore-ros2/` lets frontier search walk through inflated doorways (see [section 9.5](#95-explore_lite-frontier-parameters)) | upstream, pinned in this repo; patch by Robocop |
+| `src/third_party/m-explore-ros2` | Git submodule (commit `326cf8a`). Provides the `explore_lite` and `explore_lite_msgs` packages. `colcon_defaults.yaml` skips the unused `multirobot_map_merge` package. | upstream, pinned in this repo |
 | `src/camera_brightness` | Small node, started with the robot, that publishes the mean brightness of the left camera image | Kunal |
-| `patches/` | Local patches applied to the third-party submodule (`apply_patches.sh`; `run_sim.sh` runs it before launch) | Robocop |
 | `.devcontainer/` | Docker image: ROS 2 Humble, Gazebo Fortress (`ros-humble-ros-gz`), RTAB-Map, Nav2, RViz, and a tf2 upgrade past 0.25.23 | Robocop |
 | `documents/` | Stereo Eye documentation, including this file | Robocop |
 
@@ -199,9 +198,7 @@ source install/setup.bash
 ./src/stereo_eye_launcher/scripts/run_sim.sh explore:=true gz_gui:=false
 ```
 
-`run_sim.sh` sources the workspace, applies the local patches under
-`patches/` (and rebuilds `explore_lite` if the patched source is newer than
-the build), warns if tf2 is the broken 0.25.23 version, starts
+`run_sim.sh` sources the workspace, warns if tf2 is the broken 0.25.23 version, starts
 `ros2 launch stereo_eye_launcher launch.py` with your arguments, prints
 everything in the terminal (with colours), and also saves a plain-text copy
 to:
@@ -592,7 +589,7 @@ commands at 0.3 m/s and 1.0 rad/s.
 | `min_approach_linear_velocity` | 0.08 m/s | Less creeping at the goal; can overshoot slightly | More hesitation on the last centimetres |
 | `approach_velocity_scaling_dist` | 0.3 m | Starts slowing earlier | Starts slowing later, more decisive at the end |
 | `cost_scaling_dist` | 0.25 m | Slows down further from obstacles (more timid in open rooms) | Only slows when already close (current intent) |
-| `regulated_linear_scaling_min_radius` | 0.5 m (was 0.9) | Slows down on gentler curves (more timid) | Stays at cruise on milder curves; 0.5 is the current value, so only tighter turns slow down. Too low can enter a tight curve too fast |
+| `regulated_linear_scaling_min_radius` | 0.9 m | Slows down on gentler curves (more timid) | Stays at cruise on milder curves; too low can enter a tight curve too fast (0.5 was tried Nov 24 and reverted) |
 | `regulated_linear_scaling_min_speed` | 0.08 m/s | Stays faster near obstacles and on curves | Can crawl; below this, stuck_recovery's "pushing" check may never fire |
 | `rotate_to_heading_min_angle` | 1.05 rad (60°) | Turns in place only for sharper corners; drives more arcs (can swing the body toward a wall) | Turns in place more often (looks like dithering) |
 | `rotate_to_heading_angular_vel` | 0.4 rad/s | Faster in-place turns; harder on visual odometry | Slower turns |
@@ -671,31 +668,15 @@ robot are **kept**. The global costmap is still cleared entirely (rtabmap's
 File: `src/stereo_eye_launcher/config/explore_params.yaml`.
 The node is started with that file when `explore:=true`.
 
-**Local patch (doorways).** The pinned submodule (`326cf8a`) is also patched
-by `patches/m-explore-ros2/0001-frontier-search-through-inflated-cells.patch`.
-`run_sim.sh` applies it through `patches/apply_patches.sh` (safe to re-run)
-and rebuilds `explore_lite` when the patched source is newer than the
-installed binary. `colcon build` alone does not apply the patch: run
-`bash patches/apply_patches.sh` first, or just use `run_sim.sh`. The
-submodule pointer stays at `326cf8a`; `.gitmodules` has `ignore = dirty` so
-the patched files do not show up in `git status`.
+**Known limit (doorways, not patched).** Stock `FrontierSearch::searchFrom()`
+only steps to a neighbour whose cost is `<=` the current cell, so inflated
+cells act like walls for the frontier search. With `inflation_radius` 0.35 m a
+narrow doorway can hide the next room and explore_lite may report "No
+frontiers found, stopping." too early. A one-line patch for this was tried on
+Nov 24, 2026 and reverted because it made navigation worse; our own
+exploration node is planned instead.
 
-Why the patch exists: stock `FrontierSearch::searchFrom()` only steps to a
-neighbour whose cost is `<=` the current cell. Starting on a free cell
-(cost 0) that means it only ever crosses cost-0 cells, so every inflated
-cell (cost 1–252) acts like a wall. With `inflation_radius` 0.35 m, a 0.9 m
-or 1.0 m doorway has only a narrow cost-0 strip, and a slightly thick
-stereo door frame can close it completely. Frontiers in the next room then
-become invisible, and explore_lite reports "No frontiers found, stopping."
-even though Nav2 could drive through (it accepts any cost below 253).
-
-The patch also allows a step to any neighbour with cost `< 253`
-(`INSCRIBED_INFLATED_OBSTACLE`): the same rule as the planner. Unknown
-(255), lethal (254) and inscribed (253) cells still stop the search.
-Frontier detection, ranking, `min_frontier_size` and the blacklist are
-unchanged.
-
-This version (submodule `326cf8a`, with that patch) ranks frontiers as:
+This version (submodule `326cf8a`) ranks frontiers as:
 
 ```text
 cost = potential_scale * distance_m * resolution  -  gain_scale * length_m

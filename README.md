@@ -47,7 +47,6 @@ yet. Details are in the [architecture document](documents/stereo_architecture.md
 | `src/stereo_eye_launcher` | Launch package: Gazebo, bridge, stereo odometry, RTAB-Map, Nav2, explore_lite, RViz, driving, log script | Bazooka (launch files) | [README](src/stereo_eye_launcher/README.md) |
 | `src/third_party/m-explore-ros2` | Git submodule: `explore_lite` (frontier exploration) and `explore_lite_msgs`, pinned at commit `326cf8a` | upstream, pinned here | [README](src/third_party/m-explore-ros2/README.md) |
 | `src/camera_brightness` | Small node that reports the left camera image brightness | Kunal | none yet |
-| `patches/` | Local patches for the `m-explore-ros2` submodule (frontier search through inflated doorways) | Robocop | [apply_patches.sh](patches/apply_patches.sh) |
 | `.devcontainer/` | Docker development container with ROS 2 Humble and all dependencies | Robocop (CTO) | [setup notes](documents/ROS_Docker_Container_Setup.md) |
 | `documents/` | Stereo Eye documentation, including the system architecture | Robocop | [stereo_architecture.md](documents/stereo_architecture.md) |
 
@@ -74,15 +73,6 @@ colcon build --packages-up-to stereo_eye_launcher
 source install/setup.bash
 ./src/stereo_eye_launcher/scripts/run_sim.sh explore:=true gz_gui:=false
 ```
-
-`run_sim.sh` first applies our patches to third-party code (`patches/`, see
-[patches/apply_patches.sh](patches/apply_patches.sh)) and, if a patch is newer
-than the build, rebuilds `explore_lite` by itself. The current patch
-(`patches/m-explore-ros2/0001-frontier-search-through-inflated-cells.patch`)
-lets explore_lite's frontier search walk through inflated but passable
-doorways, so exploration does not stop at a room entrance. To apply it by
-hand before a `colcon build`: `bash patches/apply_patches.sh` (safe to run
-again; it prints `applied now` or `already applied`, or an `ERROR`).
 
 `explore:=true` starts Nav2 and explore_lite, so the robot drives itself.
 `gz_gui:=false` starts only the Gazebo server (no Gazebo window). That avoids
