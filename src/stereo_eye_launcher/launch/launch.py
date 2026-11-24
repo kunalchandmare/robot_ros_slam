@@ -366,6 +366,19 @@ def generate_launch_description():
     # same map. While odometry is lost nothing is published on /odom (rtabmap
     # just skips those frames), and the vo -> odom TF is still sent from the
     # wheel guess, so the TF tree never breaks.
+    #
+    # "Dropping image/scan data with stamp ... clock difference ... is much
+    # lower than the expected one" warnings are harmless here. They come from
+    # rtabmap_odom's always_process_most_recent_frame (default true): when
+    # two camera frames arrive almost together in wall time (Gazebo running
+    # slower than real time delivers frames in small bursts), it skips the
+    # older one so odometry stays current. Kunal's log: 8 drops in about 27 s
+    # of 24 Hz images (~1 %), with odometry quality steady at 420-620. It is
+    # not a sync problem, so approx_sync_max_interval and the queue sizes stay
+    # as they are. Setting always_process_most_recent_frame false would
+    # process every frame, but odometry takes 70-110 ms per frame (longer
+    # than the 42 ms between frames), so a backlog and growing delay would
+    # build up instead.
     stereo_odometry = Node(
         package='rtabmap_odom',
         executable='stereo_odometry',
@@ -645,14 +658,16 @@ def generate_launch_description():
         condition=IfCondition(explore),
     )
 
-    # Stuck watchdog (explore:=true only): notices the front ToF sensor seeing
-    # something closer than 4 cm (the main trigger), or, as a conservative
-    # backup, /cmd_vel asking to drive forward for 5 s while visual odometry
-    # (/odom) does not move, then makes
-    # explore_lite give up that frontier, backs up 0.2 m, turns ~90 degrees
-    # and lets exploration continue. All thresholds are parameters of the node
-    # (see the header of scripts/stuck_recovery.py). /front_tof comes from
-    # the bridge above.
+    # Stuck watchdog (explore:=true only, and only active while explore_lite
+    # is exploring): notices the front ToF sensor seeing something closer than
+    # 4 cm while driving forward (the main trigger), /cmd_vel asking to drive
+    # forward for 5 s while visual odometry (/odom) does not move, or the
+    # robot standing too close to a wall for Nav2 to plan. It then makes
+    # explore_lite give up that frontier (not for the last case), backs up
+    # 0.15 m (no turn any more; Nav2 turns towards its next path itself) and
+    # lets exploration continue. It is the only thing that reverses the robot.
+    # All thresholds are parameters of the node (see the header of
+    # scripts/stuck_recovery.py). /front_tof comes from the bridge above.
     stuck_recovery = Node(
         package='stereo_eye_launcher',
         executable='stuck_recovery.py',
@@ -661,8 +676,10 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': use_sim_time,
             'tof_topic': '/front_tof',
-            # (m) was 0.15: recovery only below 4 cm; the costmap steers away
-            # from anything 0.04-0.30 m ahead.
+            # (m) recovery only below 4 cm, and only while driving forward;
+            # the costmap steers away from anything 0.04-0.30 m ahead.
+            # Readings of exactly range_min (0.02 m) are ignored as a Gazebo
+            # clamp artefact (tof_min_margin, see the script).
             'tof_too_close_m': 0.04,
         }],
         condition=IfCondition(explore),

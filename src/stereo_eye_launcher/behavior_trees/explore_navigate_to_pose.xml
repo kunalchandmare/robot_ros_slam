@@ -6,7 +6,7 @@
   default_nav_to_pose_bt_xml).
 
   It is Nav2 Humble's default tree (navigate_to_pose_w_replanning_and_recovery.xml,
-  copied from nav2_bt_navigator 1.1.20) with two changes:
+  copied from nav2_bt_navigator 1.1.20) with three changes:
 
   1. A check added in front:
 
@@ -18,14 +18,14 @@
   Why: explore_lite drives to the centre of a frontier. Sometimes that centre
   is right next to the robot, but in a spot the cameras cannot see (beside a
   wall, under the robot). The goal was then "reached" instantly (inside
-  xy_goal_tolerance 0.25 m), the frontier never got smaller, and explore_lite
+  xy_goal_tolerance, then 0.25 m), the frontier never got smaller, and explore_lite
   sent the same goal again every ~0.25 s, forever: a success also resets its
   progress_timeout, so it never gave up. explore_lite on Humble puts every
   ABORTED goal on its blacklist, so with this check it gives up on such a
   frontier after one try and picks another one.
 
   goal_reached_tol (0.35 m) must stay larger than the goal checker's
-  xy_goal_tolerance (0.25 m), so every goal that would succeed instantly is
+  xy_goal_tolerance (0.30 m), so every goal that would succeed instantly is
   caught here.
 
   2. The local costmap is no longer cleared entirely during recoveries. The
@@ -37,6 +37,19 @@
      from the costmap and could not be seen again, and the robot would drive
      into it. The global costmap is still cleared entirely (rtabmap's /map
      stays in it).
+
+  3. No Spin and no BackUp recoveries. The recovery list is now only
+     "clear the costmaps" and "wait 2 s", tried in turn, and the whole goal
+     is retried at most 4 times (was 6) before it fails. Then the goal ends as
+     ABORTED and explore_lite blacklists that frontier and picks another one.
+     Why: the spin (always 90 deg the same way) and the 0.30 m back-up made
+     the robot rock back and forth whenever a plan failed, and they fought
+     with stuck_recovery.py. Now stuck_recovery.py is the ONLY thing that
+     drives the robot backwards (it also gets the robot off a wall when
+     NavFn cannot plan from there, which is what BackUp used to do).
+     Spin and BackUp are still loaded in behavior_server, because Nav2's
+     default navigate_through_poses tree (loaded by bt_navigator at start-up)
+     uses them; nothing in exploration calls them.
 
   The check in (1) runs only once per goal: a Sequence remembers which child is
   running, so GoalReached is not re-checked while the robot drives (otherwise
@@ -50,8 +63,10 @@
       <Inverter>
         <GoalReached goal="{goal}" global_frame="map" robot_base_frame="base_footprint"/>
       </Inverter>
-      <!-- From here on: Nav2 Humble default tree; only the two local clears differ. -->
-      <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+      <!-- From here on: Nav2 Humble default tree, with the two local clears
+           changed and Spin/BackUp removed (see the header).
+           number_of_retries 4 (was 6): two clears and two short waits. -->
+      <RecoveryNode number_of_retries="4" name="NavigateRecovery">
         <PipelineSequence name="NavigateWithReplanning">
           <RateController hz="1.0">
             <RecoveryNode number_of_retries="1" name="ComputePathToPose">
@@ -71,9 +86,9 @@
               <ClearCostmapExceptRegion name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_except_local_costmap" reset_distance="1.5"/>
               <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
             </Sequence>
-            <Spin spin_dist="1.57"/>
-            <Wait wait_duration="5"/>
-            <BackUp backup_dist="0.30" backup_speed="0.05"/>
+            <!-- Was: Spin 1.57 rad, Wait 5 s, BackUp 0.30 m. Now only a short
+                 wait (2 s), e.g. for a fake stereo obstacle to clear. -->
+            <Wait wait_duration="2"/>
           </RoundRobin>
         </ReactiveFallback>
       </RecoveryNode>

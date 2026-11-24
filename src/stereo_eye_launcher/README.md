@@ -30,7 +30,7 @@ stereo_eye_launcher/
 └── scripts/
     ├── run_sim.sh            # source the workspace and launch, in one command
     ├── explore_map_saver.py  # saves the map when exploration is done
-    └── stuck_recovery.py     # backs up and turns when the robot is stuck
+    └── stuck_recovery.py     # backs up when the robot is stuck
 ```
 
 ## Requirements
@@ -719,35 +719,78 @@ it to ROS. It is used twice:
   so the robot slows down and steers away. The beam is narrow (25 degrees,
   straight ahead), so it never sees door frames or walls beside the robot and
   does not make it timid; it only sees what is really in front of the nose.
-- **closer than 0.04 m** (the nose is practically touching): the stuck
-  recovery (below) fires at once and backs up (`tof_too_close_m`, default
-  0.04 m).
+- **closer than 0.04 m while driving forward** (the nose is practically
+  touching): the stuck recovery (below) fires at once and backs up
+  (`tof_too_close_m`, default 0.04 m).
+
+Readings of exactly 0.02 m are ignored. 0.02 m is the sensor's smallest range
+(`range_min`), and Gazebo turns any too-small value into exactly that number
+instead of a real distance. In Kunal's test the sensor reported 0.02 m all the
+time, even after the robot had backed away and turned, which caused the
+endless back-up loop.
 
 **Stuck recovery.** If the robot still gets too close or ends up pushing into
-something, the `stuck_recovery` node notices it. It reacts when either:
+something, the `stuck_recovery` node notices it. It only watches while
+explore_lite is exploring; once exploration is complete or paused it leaves
+the robot alone. It reacts when one of these happens:
 
-- the front ToF sensor measures something closer than 4 cm (immediately; this
-  is the main trigger), or
+- the front ToF sensor measures something closer than 4 cm while Nav2 drives
+  the robot forward (immediately; this is the main trigger). Standing or
+  turning next to a wall does not count, or
 - as a careful backup: Nav2 has asked the robot to drive **forward** at
   0.08 m/s or more, without a break, for 5 s, while the camera-based position
   (visual odometry) moved less than 5 cm. At that speed it should have moved
   at least 40 cm. The wheels are not trusted for this, because they keep
-  turning when they slip.
+  turning when they slip, or
+- the robot has stood for 3 s so close to a wall that Nav2 cannot plan a path
+  from there (its centre is within 0.15 m of a wall in the costmap). Then it
+  moves 0.15 m forward or back, whichever side is clearer, and keeps the same
+  frontier (`[NO PATH]`).
 
 Turning on the spot, slowing down or pausing for a moment never counts as
 stuck, so hesitating can no longer make the robot reverse.
 
 It then:
 
-1. stops at once and prints `[TOO CLOSE] Something is 3 cm in front of the robot at (x, y):
-   backing up and choosing another frontier` or `[STUCK] Robot pushing into a
-   wall at (x, y): backing up and choosing another frontier`,
+1. stops at once and prints for example `[TOO CLOSE] Something is 3.0 cm in
+   front of the robot while driving at (x, y): backing up 0.15 m and choosing
+   another frontier`,
 2. tells explore_lite to give up that frontier (it turns red in RViz),
-3. backs up 0.2 m slowly and turns about 90 degrees (left and right in turn),
+3. backs up 0.15 m slowly, **without turning**,
 4. lets exploration continue (`[STUCK] Recovery done, exploration continues.`).
+   Nav2 then plans a new path and turns the robot towards it by itself.
 
-After a recovery it waits 10 s before it reacts again. All numbers are
-parameters of the node; see the top of `scripts/stuck_recovery.py`.
+After a recovery it waits 10 s before it reacts again. If it fires again
+within 0.5 m of an earlier recovery (in the last 2 minutes), the message says
+`(repeat 1 here)`, it backs up further (up to 0.3 m) and waits twice as long
+(up to 40 s), so it cannot loop at one spot. All numbers are parameters of the
+node; see the top of `scripts/stuck_recovery.py`.
+
+### Why it no longer rocks back and forth
+
+Earlier versions backed up and turned 90 degrees, first one way, then the
+other, again and again. Kunal's log showed where that came from:
+
+- The turning and reversing came from `stuck_recovery`, not from Nav2: the
+  log had `[TOO CLOSE] Something is 2 cm in front of the robot` at 600.9 s
+  and again at 623.8 s, right after its 10 s pause ended, and no Nav2 spin or
+  back-up at all.
+- Both readings were exactly 0.02 m, the sensor's smallest value, and the
+  second came after the robot had already backed up 0.2 m and turned. That
+  is a fake reading (see the ToF sensor above), now ignored.
+- Exploration had already ended (no new goals from explore_lite in the
+  log, and "Recovery done." without "exploration continues"), yet the robot
+  kept reacting. Now it is left alone when exploration is not running.
+- The recovery turned 90 degrees alternately left and right. It now only
+  backs up and lets Nav2 choose the direction.
+- Nav2's own recoveries also spun 90 degrees and backed up 0.3 m whenever a
+  path failed. The exploration tree now only clears the costmaps and waits
+  2 s, then gives up so explore_lite tries another frontier.
+- explore_lite re-chose its goal every 5 s, and after the switch to 2.5 cm
+  cells it valued distance only half as much, so it liked far-away
+  frontiers and switched between them. It now re-chooses every 10 s and
+  prefers near frontiers more strongly (`potential_scale` 10), see
+  `config/explore_params.yaml`.
 
 To check the ToF sensor, drive the robot towards a wall by hand (without
 `explore:=true`) and run `ros2 topic echo /front_tof --field ranges`: the
@@ -858,9 +901,9 @@ mapping. Check that the camera images show up in RViz and that
 `ros2 run tf2_ros tf2_echo map base_footprint` prints a pose.
 
 **The robot is stuck against furniture or turning on the spot.** Nav2 first
-tries recoveries (clear the costmap, spin, wait, back up). If Nav2 gives up
-(the robot moved less than 10 cm in 10 s) or explore_lite sees no progress for
-60 s, that frontier is put on a blacklist (it turns red) and explore_lite picks
+tries its recoveries (clear the costmaps, wait 2 s; no spinning or backing
+up any more). If Nav2 gives up (the robot moved less than 10 cm in 10 s) or
+explore_lite sees no progress for 30 s, that frontier is put on a blacklist (it turns red) and explore_lite picks
 another one. If it is truly wedged, put it back with the
 `set_pose` command in [Troubleshooting](#troubleshooting), and expect the map
 to be off afterwards.
@@ -894,9 +937,22 @@ messages appear and it backs up by itself. If not:
   (about 20 Hz). If there are none, the robot model does not have the sensor
   (MechaX) and only the slow 5 s "pushing without moving" check protects the
   robot.
-- If `[STUCK]` repeats again and again in the same place, the robot is boxed
-  in; stop the launch, move it with `set_pose` (see
+- If `[STUCK]` or `[TOO CLOSE]` shows `(repeat 2 here)` or more, the robot is
+  boxed in; stop the launch, move it with `set_pose` (see
   [Troubleshooting](#troubleshooting)) and start again.
+
+**The robot still backs up again and again, or takes long to move on.**
+Please send the terminal lines that contain any of
+these words: `[STUCK]`, `[TOO CLOSE]`, `[NO PATH]`, `Running spin`,
+`Running backup`, `Failed to make progress`, `planner failed`,
+`Received goal preemption request`, `No frontiers found`,
+`All frontiers traversed`.
+
+Also check the ToF sensor with the robot standing in open space:
+`ros2 topic echo /front_tof --field ranges` should print `inf` for all five
+numbers. If it prints `0.02`, the sensor gives fake readings (MechaX's model);
+they are ignored now, but then the sensor is blind and only the stereo
+cameras protect the front.
 
 **The robot stops too far from walls or refuses to go through a door.** This
 was tuned (see [Why the robot fits through doors](#why-the-robot-fits-through-doors)):
@@ -923,7 +979,8 @@ broken, stop and start again.
 
 **Exploration ends too early ("No frontiers found").** This happens when the
 map is still small, or when the frontiers left are smaller than
-`min_frontier_size` (0.5 m in `config/explore_params.yaml`). A map is saved
+`min_frontier_size` (0.75 m in `config/explore_params.yaml`), or when every
+frontier got blacklisted (`All frontiers traversed/tried out`). A map is saved
 anyway. To continue exploring, resume explore_lite:
 
 ```bash
