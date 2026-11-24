@@ -535,7 +535,7 @@ Local, which matches rtabmap's latched `/map`.
 
 **Warning `Lookup would require extrapolation into the future` for
 `odom` -> `base_footprint` (about 60 ms).** The wheel position from Gazebo
-(`/wheel_tf`, sent 30 times a second) arrives a little after the camera
+(`/wheel_tf`, sent 50 times a second) arrives a little after the camera
 images, so for a moment there is no wheel position yet for the newest image.
 `stereo_odometry` and `rtabmap` wait up to 0.2 s (`wait_for_transform`) and
 Nav2 accepts 0.5 s (`transform_tolerance`), so an occasional warning is
@@ -690,15 +690,29 @@ nothing is measured, so a wall that close is invisible. That is why:
   touch an obstacle. It usually stops with its body 0.1 to 0.3 m from a wall,
 - Nav2's recoveries no longer wipe obstacles within 0.75 m of the robot.
 
-**Stuck recovery.** If the robot still ends up pushing into something, the
-`stuck_recovery` node notices it. "Stuck" means either the bumper touched
-something, or Nav2 has asked the robot to drive (faster than 0.05 m/s) for
-2 s while the camera-based position (visual odometry) moved less than 3 cm.
-The wheels are not trusted for this, because they keep turning when they slip.
+**Front ToF sensor.** MechaX's front time-of-flight range sensor (Gazebo
+`gpu_lidar`, topic `/front_tof`, `sensor_msgs/msg/LaserScan`, range 0.30 m)
+looks straight ahead, right inside the stereo blind zone. `launch.py` bridges
+it to ROS. It is used twice:
+
+- **0.15 to 0.30 m:** Nav2's local costmap marks what it sees as an obstacle,
+  so the robot slows down and steers away.
+- **closer than 0.15 m:** the stuck recovery (below) fires at once and backs
+  up (`tof_too_close_m`, default 0.15 m).
+
+**Stuck recovery.** If the robot still gets too close or ends up pushing into
+something, the `stuck_recovery` node notices it. It reacts when either:
+
+- the front ToF sensor measures something closer than 0.15 m (immediately), or
+- Nav2 has asked the robot to drive (faster than 0.05 m/s) for 2 s while the
+  camera-based position (visual odometry) moved less than 3 cm. The wheels are
+  not trusted for this, because they keep turning when they slip.
+
 It then:
 
-1. prints `[STUCK] Robot pushing into a wall at (x, y): backing up and
-   choosing another frontier`,
+1. prints `[TOO CLOSE] Something is 12 cm in front of the robot at (x, y):
+   backing up and choosing another frontier` or `[STUCK] Robot pushing into a
+   wall at (x, y): backing up and choosing another frontier`,
 2. tells explore_lite to give up that frontier (it turns red in RViz),
 3. backs up 0.2 m slowly and turns about 90 degrees (left and right in turn),
 4. lets exploration continue (`[STUCK] Recovery done, exploration continues.`).
@@ -706,23 +720,11 @@ It then:
 After a recovery it waits 10 s before it reacts again. All numbers are
 parameters of the node; see the top of `scripts/stuck_recovery.py`.
 
-**Bumper.** MechaX added a thin front bumper plate with a Gazebo contact
-sensor (`front_bumper_link`, Gazebo topic `/bumper`, `ignition.msgs.Contacts`;
-see the `stereo_eye` README). `launch.py` bridges it to ROS as
-`/bumper` (`ros_gz_interfaces/msg/Contacts`), and `stuck_recovery` treats any
-contact as "stuck". One piece is still missing: **the world must load Gazebo's
-Contact system**, otherwise the sensor never publishes (Isekai owns
-`apartment.sdf`):
-
-```xml
-<plugin filename="ignition-gazebo-contact-system" name="ignition::gazebo::systems::Contact"/>
-```
-
-Until then only the "pushing without moving" check works. To test the bumper,
-drive the robot into a wall by hand (without `explore:=true`) and run
-`ros2 topic echo /bumper`. If the topic or message type ever changes, set the
-`stuck_recovery` parameters `bumper_topic` and `bumper_type` (`contacts`,
-`bool` or `none`).
+To check the ToF sensor, drive the robot towards a wall by hand (without
+`explore:=true`) and run `ros2 topic echo /front_tof --field ranges`: the
+numbers drop below 0.30 as the wall gets close, and show `inf` when nothing is
+in range. If the topic changes, set the `stuck_recovery` parameter
+`tof_topic` (and the `front_tof` source in `config/nav2_params.yaml`).
 
 ### Where the map is saved
 
@@ -801,6 +803,9 @@ messages appear and it backs up by itself. If not:
   should be covered with dots. Plain walls without texture give few dots.
 - Check that the stuck watchdog runs: the terminal shows `Watching for a stuck
   robot` at start-up.
+- Check the front ToF sensor: `ros2 topic hz /front_tof` should show messages.
+  If there are none, the robot model does not have the sensor yet (MechaX) and
+  only the 2 s "pushing without moving" check protects the robot.
 - If `[STUCK]` repeats again and again in the same place, the robot is boxed
   in; stop the launch, move it with `set_pose` (see
   [Troubleshooting](#troubleshooting)) and start again.
@@ -838,9 +843,11 @@ good enough, then stop the launch.
 - **Stereo blind zone.** Nothing closer than about 0.35 m in front of the
   cameras is seen, and nothing behind or beside the robot. Obstacles that
   appear inside that zone (or were never seen from further away) are only
-  caught by the bumper or the stuck check.
-- **Bumper needs the world's Contact system.** Until `apartment.sdf` loads it,
-  being stuck is only detected from "pushing without moving" (about 2 s).
+  caught by the front ToF sensor (straight ahead only, 0.30 m) or the stuck
+  check.
+- **ToF only looks straight ahead** (narrow field of view). A corner or table
+  leg slightly to the side is missed; then only the "pushing without moving" check (about 2 s)
+  helps.
 - **Low obstacles and table tops.** The map only counts things between 5 cm
   and 40 cm high (`Grid/MaxGroundHeight`, `Grid/MaxObstacleHeight`). Very low
   objects are missed; the robot may drive under tables.
