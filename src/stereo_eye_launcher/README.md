@@ -731,17 +731,19 @@ nothing is measured, so a wall that close is invisible. That is why:
 - Nav2's recoveries no longer wipe obstacles within 0.75 m of the robot.
 
 **Front ToF sensor.** MechaX's front time-of-flight range sensor (Gazebo
-`gpu_lidar`, topic `/front_tof`, `sensor_msgs/msg/LaserScan`, range 0.30 m)
-looks straight ahead, right inside the stereo blind zone. `launch.py` bridges
+`gpu_lidar`, topic `/front_tof`, `sensor_msgs/msg/LaserScan`, range 1.0 m,
+50 degrees wide, 21 x 3 rays at 5.5 cm height) looks ahead, also right inside
+the stereo blind zone. `launch.py` bridges
 it to ROS. It is used twice:
 
-- **0.04 to 0.30 m:** Nav2's local costmap marks what it sees as an obstacle,
+- **0.04 to 1.0 m:** Nav2's local costmap marks what it sees as an obstacle,
   so the robot slows down and steers away. The global costmap (the one the
   path planner uses) marks it too, so a new path goes around it. Every hit
   is **kept for 20 s** (`observation_persistence`), even when the stereo
-  cloud would erase it. This matters for plain furniture, see below. The beam is narrow (25 degrees,
-  straight ahead), so it never sees door frames or walls beside the robot and
-  does not make it timid; it only sees what is really in front of the nose.
+  cloud would erase it. This matters for plain furniture, see below. It now
+  also sees walls ahead and door frames, but the simulated sensor has no
+  noise, so it marks them exactly where they are (the same place as the map),
+  which does not make doors narrower.
 - **closer than 0.04 m while driving forward** (the nose is practically
   touching): the stuck recovery (below) fires at once and backs up
   (`tof_too_close_m`, default 0.04 m).
@@ -758,7 +760,8 @@ speckles and thin arcs where the furniture is). What reliably sees them is
 the ToF sensor (its beam at 5.5 cm hits every box). That is why its hits are
 kept for 20 s and also go into the planner's costmap: once the robot has
 touched a box face, Nav2 plans around it instead of straight through it
-again. It still has to get within 0.30 m of a box to notice it; the real fix
+again. It notices a box up to 1.0 m ahead and 25 degrees to either side, but
+only at 5.5 cm height; the real fix
 is texture on the furniture in the world (asked for from apartment_gazebo).
 
 Readings of exactly the sensor's smallest range (`range_min`, 0.01 m since
@@ -832,7 +835,7 @@ other, again and again. Kunal's log showed where that came from:
 
 To check the ToF sensor, drive the robot towards a wall by hand (without
 `explore:=true`) and run `ros2 topic echo /front_tof --field ranges`: the
-numbers drop below 0.30 as the wall gets close, and show `inf` when nothing is
+numbers drop below 1.0 as the wall gets close, and show `inf` when nothing is
 in range. The smallest number it can show is its `range_min` (0.01 m); that
 must stay below `tof_too_close_m` (0.04 m), or the 4 cm trigger can never
 fire. If the topic changes, set the `stuck_recovery` parameter
@@ -998,8 +1001,8 @@ grep -E "STUCK|TOO CLOSE|NO PATH|Running spin|Running backup|Failed to make prog
 ```
 
 Also check the ToF sensor with the robot standing in open space:
-`ros2 topic echo /front_tof --field ranges` should print `inf` for all 33
-numbers (11 x 3 rays). If it prints `0.01` (its `range_min`), the sensor gives fake readings (MechaX's model);
+`ros2 topic echo /front_tof --field ranges` should print `inf` for all 63
+numbers (21 x 3 rays) if nothing is within 1 m. If it prints `0.01` (its `range_min`), the sensor gives fake readings (MechaX's model);
 they are ignored now, but then the sensor is blind and only the stereo
 cameras protect the front.
 
@@ -1128,11 +1131,11 @@ python3 src/stereo_eye_launcher/test/test_frontier_selection.py \
 - **Stereo blind zone.** Nothing closer than about 0.35 m in front of the
   cameras is seen, and nothing behind or beside the robot. Obstacles that
   appear inside that zone (or were never seen from further away) are only
-  caught by the front ToF sensor (straight ahead only, 0.30 m) or the stuck
+  caught by the front ToF sensor (50 degrees ahead, 1.0 m, at 5.5 cm height) or the stuck
   check.
-- **ToF only looks straight ahead** (narrow field of view). A corner or table
-  leg slightly to the side is missed; then only the slow "pushing without
-  moving" check (5 s) helps.
+- **ToF only looks ahead** (25 degrees to each side, one height). A corner
+  or table leg further to the side is missed; then only the slow "pushing
+  without moving" check (5 s) helps.
 - **Low obstacles and table tops.** The map only counts things between 5 cm
   and 40 cm high (`Grid/MaxGroundHeight`, `Grid/MaxObstacleHeight`), and the
   live stereo obstacles only things between 10 cm and 40 cm. Very low objects

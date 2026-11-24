@@ -14,7 +14,7 @@ When is the robot "stuck"? Any of:
   1. [TOO CLOSE] (the main trigger): the front time-of-flight (ToF) range
      sensor (tof_topic, default /front_tof, sensor_msgs/msg/LaserScan from a
      Gazebo gpu_lidar, range_min 0.01 m since MechaX 501ef3f (was 0.02),
-     range_max 0.30 m) measures something
+     range_max 1.0 m and 50 deg wide since MechaX 9a375f1) measures something
      closer than tof_too_close_m (0.04 m) WHILE Nav2 is driving the robot
      forward (a /cmd_vel with linear.x > tof_push_speed, 0.02 m/s, in the last
      0.5 s). Standing still or turning on the spot next to a wall is fine

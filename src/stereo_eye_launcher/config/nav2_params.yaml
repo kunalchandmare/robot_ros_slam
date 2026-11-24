@@ -58,8 +58,8 @@
 # walls block matching fails earlier, so in practice anything closer than
 # about 0.35 m in front of the cameras is invisible. The layer therefore keeps
 # obstacles it saw from further away (marks stay until a ray clears them), and
-# the front ToF sensor (local costmap) covers exactly that zone, 0.01-0.30 m
-# in front of the robot's nose.
+# the front ToF sensor (both costmaps) covers that zone and beyond: 50 deg
+# wide, up to 1.0 m in front of the robot's nose (MechaX 9a375f1).
 #
 # Only non-default or important settings are listed; Nav2 fills in the rest.
 
@@ -233,22 +233,22 @@ local_costmap:
       #                front of the robot. With marking points alone, empty
       #                floor would never clear stale obstacles.
       #   front_tof    the front time-of-flight range sensor (LaserScan,
-      #                0.30 m range), which sees right inside the stereo blind
-      #                zone. It marks and clears, so the robot steers away from
-      #                anything 0.04-0.30 m in front of it; below 0.04 m
-      #                stuck_recovery.py backs up instead (tof_too_close_m).
+      #                1.0 m range, 50 deg wide, 21 x 3 = 63 rays since MechaX
+      #                9a375f1; was 0.30 m, 25 deg, 11 x 3), which also sees
+      #                inside the stereo blind zone. It marks and clears, so
+      #                the robot steers away from anything 0.04-1.0 m in front
+      #                of it; below 0.04 m stuck_recovery.py backs up instead
+      #                (tof_too_close_m).
       #
-      # Why the ToF stays in the costmap (and keeps its full 0.30 m): it does
-      # not make the robot timid. Its rays (11 x 3 since MechaX 501ef3f) cover only +/-12.5 deg straight
-      # ahead, at 5.5 cm height, from the robot's nose. Driving through the
-      # middle of a 0.356 m door, a jamb 0.178 m to the side would only enter
-      # the beam about 0.75 m ahead, beyond its 0.30 m range, so door frames
-      # and walls beside the robot are never marked. What it does mark is a
-      # real surface right in front, inside the stereo blind zone, which the
-      # robot must turn away from anyway. The simulated sensor has no
-      # speckle noise, and the hesitation came from stereo floor speckles plus
-      # the old 0.25 m radius, not from the ToF. Shortening its range would
-      # only bring back the blind zone.
+      # What the wider ToF marks: everything its 5.5 cm high fan hits within
+      # 1 m and +/-25 deg, i.e. plain furniture (which stereo cannot see), but
+      # now also walls ahead and door jambs. Driving through the middle of a
+      # 0.356 m door, a jamb 0.178 m to the side enters the fan about 0.38 m
+      # before the sensor reaches the door. That is fine: the simulated ToF
+      # has no noise, so it marks a jamb where it really is, the same place
+      # as the wall in rtabmap's map and the stereo marks. It only narrows a
+      # door if rtabmap drew the wall in the wrong place, and then the ToF
+      # mark is the correct one.
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
@@ -263,15 +263,15 @@ local_costmap:
           clearing: True
           # A "no echo" reading is inf. inf_is_valid is False, so those are
           # simply dropped. (With True, Nav2 turns inf into a point at
-          # range_max - 0.1 mm. The marking range check works in whole
-          # cells, so such a point could not be kept apart from a real hit at
-          # 0.30 m and would show up as a phantom obstacle in front of the
-          # robot.) Old ToF marks are still cleared: by rays to new ToF hits,
+          # range_max - 0.1 mm, which would show up as a phantom obstacle
+          # 1.0 m in front of the robot.) Old ToF marks are still cleared: by rays to new ToF hits,
           # and by the stereo_clear rays that pass over these cells to floor
           # points further away, but only once they are older than
           # observation_persistence (20 s, below).
           inf_is_valid: False
-          obstacle_max_range: 0.30    # (m) = sensor range (unchanged, see above)
+          # (m) was 0.30 = the old sensor range; 1.0 = the new one. Points at
+          # exactly 1.0 m are not marked (Nav2 keeps distances < this value).
+          obstacle_max_range: 1.0
           # (m) was 0.0. Gazebo clamps every finite reading below range_min
           # UP to exactly range_min (gz-sensors 6, Lidar::Clamp), and Kunal's
           # log showed constant readings of the range_min (then 0.02 m) that
@@ -281,9 +281,13 @@ local_costmap:
           # points would lie inside the robot circle and be erased by
           # footprint clearing anyway, but this keeps them out entirely.)
           obstacle_min_range: 0.025
-          raytrace_max_range: 0.35    # (m) clear along the whole beam
+          raytrace_max_range: 1.05    # (m) was 0.35; clear along the whole (1.0 m) beam
           raytrace_min_range: 0.0
-          min_obstacle_height: 0.0    # (m) the beam is low; keep every hit
+          # (m) was 0.0. The rays are 3.8-7.2 cm above the floor at 1 m
+          # (5.5 cm +/- 1 deg), so no real hit is below 2 cm. A point lower
+          # than that would be a floor hit, and with 20 s persistence a long
+          # lived phantom obstacle, so it is dropped.
+          min_obstacle_height: 0.02
           max_obstacle_height: 0.40
           # (s) was 0.0 (latest scan only). Keep every ToF hit of the last
           # 20 s. The obstacle layer first clears along the stereo rays and
@@ -397,9 +401,9 @@ global_costmap:
           marking: True
           clearing: False
           inf_is_valid: False         # "no echo" (inf) readings are dropped
-          obstacle_max_range: 0.30    # (m) = sensor range
+          obstacle_max_range: 1.0     # (m) was 0.30; = sensor range (MechaX 9a375f1)
           obstacle_min_range: 0.025   # (m) ignore the range_min clamp readings
-          min_obstacle_height: 0.0
+          min_obstacle_height: 0.02   # (m) was 0.0; no floor hits (see local costmap)
           max_obstacle_height: 0.40
           observation_persistence: 20.0  # (s) see the local costmap
           expected_update_rate: 0.0

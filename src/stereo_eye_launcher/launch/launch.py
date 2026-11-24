@@ -298,9 +298,9 @@ def generate_launch_description():
             '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
             '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
             # Front time-of-flight range sensor (gpu_lidar in
-            # stereo_eye.gazebo.xacro, MechaX), 0.30 m range, covering the
-            # stereo blind zone. Read by both Nav2 costmaps (obstacles 0.04 to
-            # 0.30 m away, kept 20 s) and stuck_recovery.py (closer than 0.04 m).
+            # stereo_eye.gazebo.xacro, MechaX), 1.0 m range, 50 deg wide,
+            # covering the stereo blind zone. Read by both Nav2 costmaps
+            # (obstacles 0.04 to 1.0 m away, kept 20 s) and stuck_recovery.py (closer than 0.04 m).
             # Harmless if the sensor is not in the model yet (no messages).
             '/front_tof@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
         ],
@@ -710,7 +710,7 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'tof_topic': '/front_tof',
             # (m) recovery only below 4 cm, and only while driving forward;
-            # the costmap steers away from anything 0.04-0.30 m ahead.
+            # the costmap steers away from anything 0.04-1.0 m ahead.
             # Readings of exactly range_min (0.01 m, was 0.02) are ignored as a Gazebo
             # clamp artefact (tof_min_margin, see the script).
             'tof_too_close_m': 0.04,
