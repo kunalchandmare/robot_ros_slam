@@ -9,7 +9,7 @@
     base_footprint -> base_link -> {left,right}_wheel_link (continuous)
                                 -> caster_link (fixed, rear)
                                 -> front_caster_link (fixed, front skid/caster)
-                                -> front_bumper_link (fixed, contact bumper; joint not lumped)
+                                -> front_tof_link (fixed, short-range ToF / gpu_lidar)
                                 -> ballast_link (fixed, low battery pack)
                                 -> imu_link (fixed)
                                 -> head_link (fixed) -> stereo_bar_link (fixed, rigid stereo bar)
@@ -91,20 +91,30 @@
   <xacro:property name="front_caster_x"    value="0.075"/>
   <xacro:property name="front_caster_mass" value="0.05"/>
 
-  <!-- Thin front bumper, just ahead of the front caster, used as a contact sensor.
-       Stereo depth is blind under about 0.35 m, so during exploration the robot can
-       push into a wall before the cameras see it. The plate does not touch the ground
-       (2.5 cm clearance) and is light, so the support polygon and the tip-over margins
-       barely change. -->
-  <xacro:property name="bumper_x"     value="0.010"/>
-  <xacro:property name="bumper_y"     value="0.160"/>
-  <xacro:property name="bumper_z"     value="0.060"/>
-  <xacro:property name="bumper_mass"  value="0.04"/>
-  <xacro:property name="bumper_clear" value="0.025"/>  <!-- height of the bumper underside above the ground -->
-  <!-- centre is 2 mm past the front of the front caster -->
-  <xacro:property name="bumper_off_x" value="${front_caster_x + caster_r + bumper_x/2 + 0.002}"/>
+  <!-- Front time-of-flight (ToF) ranger: a small gpu_lidar that looks forward under
+       the stereo cameras. Max range defaults to 0.30 m so it overlaps the cameras'
+       unreliable near band (~0.17-0.35 m) and covers the last few centimetres the
+       stereo cannot trust. Raise tof_max_range if you want a longer feeler.
+       The link origin is the optical centre at the FRONT FACE of the housing, so
+       the first ray is already outside the box (min range 0.02 m > 0). Pitch is
+       zero and there is one vertical sample, so a 0.30 m beam at this height
+       cannot hit the floor, the casters or the body (all of which sit behind
+       or below the origin). -->
+  <xacro:property name="tof_x"         value="0.020"/>
+  <xacro:property name="tof_y"         value="0.024"/>
+  <xacro:property name="tof_z"         value="0.016"/>
+  <xacro:property name="tof_mass"      value="0.02"/>
+  <xacro:property name="tof_min_range" value="0.02"/>
+  <xacro:property name="tof_max_range" value="0.30"/>  <!-- metres; change this to lengthen the feeler -->
+  <xacro:property name="tof_hfov"      value="0.4363323129985824"/>  <!-- 25 deg; rays at +/- 0.218 rad -->
+  <xacro:property name="tof_h_samples" value="5"/>
+  <xacro:property name="tof_v_samples" value="1"/>
+  <xacro:property name="tof_fps"       value="20"/>
+  <xacro:property name="tof_height"    value="0.055"/>  <!-- optical centre above the ground, level beam -->
+  <!-- origin = front face, 2 mm past the front caster so the housing does not overlap it -->
+  <xacro:property name="tof_off_x"     value="${front_caster_x + caster_r + 0.002 + tof_x}"/>
   <!-- joint is in base_link (axle height = wheel_radius) -->
-  <xacro:property name="bumper_off_z" value="${bumper_clear + bumper_z/2 - wheel_radius}"/>
+  <xacro:property name="tof_off_z"     value="${tof_height - wheel_radius}"/>
 
   <!-- Low battery / chassis ballast, sitting on the torso floor. Dense pack + base plate
        (2.40 kg in 0.120 x 0.130 x 0.050 m, ~3077 kg/m^3). Keeps the COM low. -->
@@ -399,33 +409,33 @@
   </joint>
   <xacro:gazebo_ode_contact link="front_caster_link" mu="0.01"/>
 
-  <!-- Front bumper / contact plate. Collision is left unnamed so the URDF-to-SDF
-       converter (sdformat parser_urdf.cc CreateCollisions) names it
-       front_bumper_link_collision — that is the name the contact sensor must use.
-       The fixed joint is preserved (see gazebo.xacro) so lumping cannot rename it to
-       something like base_link_fixed_joint_lump__front_bumper_link_collision, which
-       would desync the sensor's <collision> reference. -->
-  <link name="front_bumper_link">
-    <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><box size="${bumper_x} ${bumper_y} ${bumper_z}"/></geometry>
-      <material name="se_blue"/>
+  <!-- Front ToF housing. Link origin is the optical centre at the front face
+       (x forward), so gpu_lidar rays start outside the box. The housing (visual,
+       collision and inertia) sits behind that origin. -->
+  <link name="front_tof_link">
+    <visual name="tof_housing">
+      <origin xyz="${-tof_x/2} 0 0" rpy="0 0 0"/>
+      <geometry><box size="${tof_x} ${tof_y} ${tof_z}"/></geometry>
+      <material name="se_dark"/>
+    </visual>
+    <visual name="tof_window">
+      <origin xyz="0 0 0" rpy="0 ${PI/2} 0"/>
+      <geometry><cylinder radius="0.006" length="0.002"/></geometry>
+      <material name="se_sky"/>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><box size="${bumper_x} ${bumper_y} ${bumper_z}"/></geometry>
+      <origin xyz="${-tof_x/2} 0 0" rpy="0 0 0"/>
+      <geometry><box size="${tof_x} ${tof_y} ${tof_z}"/></geometry>
     </collision>
-    <xacro:box_inertial m="${bumper_mass}" x="${bumper_x}" y="${bumper_y}" z="${bumper_z}">
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+    <xacro:box_inertial m="${tof_mass}" x="${tof_x}" y="${tof_y}" z="${tof_z}">
+      <origin xyz="${-tof_x/2} 0 0" rpy="0 0 0"/>
     </xacro:box_inertial>
   </link>
-  <joint name="front_bumper_joint" type="fixed">
+  <joint name="front_tof_joint" type="fixed">
     <parent link="base_link"/>
-    <child link="front_bumper_link"/>
-    <origin xyz="${bumper_off_x} 0 ${bumper_off_z}" rpy="0 0 0"/>
+    <child link="front_tof_link"/>
+    <origin xyz="${tof_off_x} 0 ${tof_off_z}" rpy="0 0 0"/>
   </joint>
-  <!-- Modest friction: enough to register a hit, not so sticky that it grabs the wall. -->
-  <xacro:gazebo_ode_contact link="front_bumper_link" mu="0.5"/>
 
   <!-- Internal battery / chassis ballast on the torso floor. No visual or collision: it sits
        inside the torso shell. Inertia is a solid box matching the pack size. -->

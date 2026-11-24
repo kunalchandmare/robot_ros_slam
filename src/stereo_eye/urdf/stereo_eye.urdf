@@ -13,7 +13,7 @@
     base_footprint -> base_link -> {left,right}_wheel_link (continuous)
                                 -> caster_link (fixed, rear)
                                 -> front_caster_link (fixed, front skid/caster)
-                                -> front_bumper_link (fixed, contact bumper; joint not lumped)
+                                -> front_tof_link (fixed, short-range ToF / gpu_lidar)
                                 -> ballast_link (fixed, low battery pack)
                                 -> imu_link (fixed)
                                 -> head_link (fixed) -> stereo_bar_link (fixed, rigid stereo bar)
@@ -476,44 +476,41 @@
     <kd>100.0</kd>
     <minDepth>0.001</minDepth>
   </gazebo>
-  <!-- Front bumper / contact plate. Collision is left unnamed so the URDF-to-SDF
-       converter (sdformat parser_urdf.cc CreateCollisions) names it
-       front_bumper_link_collision — that is the name the contact sensor must use.
-       The fixed joint is preserved (see gazebo.xacro) so lumping cannot rename it to
-       something like base_link_fixed_joint_lump__front_bumper_link_collision, which
-       would desync the sensor's <collision> reference. -->
-  <link name="front_bumper_link">
-    <visual>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+  <!-- Front ToF housing. Link origin is the optical centre at the front face
+       (x forward), so gpu_lidar rays start outside the box. The housing (visual,
+       collision and inertia) sits behind that origin. -->
+  <link name="front_tof_link">
+    <visual name="tof_housing">
+      <origin rpy="0 0 0" xyz="-0.01 0 0"/>
       <geometry>
-        <box size="0.01 0.16 0.06"/>
+        <box size="0.02 0.024 0.016"/>
       </geometry>
-      <material name="se_blue"/>
+      <material name="se_dark"/>
+    </visual>
+    <visual name="tof_window">
+      <origin rpy="0 1.570796326794895 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.002" radius="0.006"/>
+      </geometry>
+      <material name="se_sky"/>
     </visual>
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.01 0 0"/>
       <geometry>
-        <box size="0.01 0.16 0.06"/>
+        <box size="0.02 0.024 0.016"/>
       </geometry>
     </collision>
     <inertial>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
-      <mass value="0.04"/>
-      <inertia ixx="9.733333333333333e-05" ixy="0" ixz="0" iyy="1.2333333333333333e-05" iyz="0" izz="8.566666666666667e-05"/>
+      <origin rpy="0 0 0" xyz="-0.01 0 0"/>
+      <mass value="0.02"/>
+      <inertia ixx="1.3866666666666666e-06" ixy="0" ixz="0" iyy="1.0933333333333334e-06" iyz="0" izz="1.6266666666666668e-06"/>
     </inertial>
   </link>
-  <joint name="front_bumper_joint" type="fixed">
+  <joint name="front_tof_joint" type="fixed">
     <parent link="base_link"/>
-    <child link="front_bumper_link"/>
-    <origin rpy="0 0 0" xyz="0.0995 0 -0.010000000000000002"/>
+    <child link="front_tof_link"/>
+    <origin rpy="0 0 0" xyz="0.1145 0 -0.010000000000000002"/>
   </joint>
-  <gazebo reference="front_bumper_link">
-    <mu1>0.5</mu1>
-    <mu2>0.5</mu2>
-    <kp>1000000.0</kp>
-    <kd>100.0</kd>
-    <minDepth>0.001</minDepth>
-  </gazebo>
   <!-- Internal battery / chassis ballast on the torso floor. No visual or collision: it sits
        inside the torso shell. Inertia is a solid box matching the pack size. -->
   <link name="ballast_link">
@@ -920,31 +917,44 @@
       </imu>
     </sensor>
   </gazebo>
-  <!-- == Front bumper contact sensor == -->
-  <!-- Keep this fixed joint in the SDF. If it were lumped, the collision would be
-       renamed (sdformat12 parser_urdf.cc: kLumpPrefix = "_fixed_joint_lump__") to
-       base_link_fixed_joint_lump__front_bumper_link_collision, and the sensor's
-       <collision> text would not be rewritten to that name — ign-gazebo6's Contact
-       system would then find no matching collision on the parent link.
-       preserveFixedJoint (preferred over disableFixedJointLumping) keeps a real
-       fixed joint; both parent and child have mass, which the sdformat docs require. -->
-  <gazebo reference="front_bumper_joint">
-    <preserveFixedJoint>true</preserveFixedJoint>
-  </gazebo>
-  <gazebo reference="front_bumper_link">
-    <!-- ign-gazebo6 Contact.cc reads <topic> from INSIDE <contact>, not from the
-         sensor-level <topic> used by cameras. Both are set so the absolute gz topic
-         is /bumper. Message type: ignition.msgs.Contacts (Advertise<msgs::Contacts>).
-         The world must load the Contact system or nothing is published. -->
-    <sensor name="front_bumper_contact" type="contact">
+  <!-- == Front ToF (gpu_lidar) == -->
+  <!-- Fortress ign-sensors6 GpuLidarSensor: Lidar::Load advertises
+       ignition.msgs.LaserScan on the sensor topic, then GpuLidarSensor::Load
+       advertises ignition.msgs.PointCloudPacked on <topic>/points.
+       The Sensors system (already in apartment.sdf, render_engine ogre) drives
+       this; the Contact system is not used. Topic is set at sensor level
+       (unlike the old contact sensor). -->
+  <gazebo reference="front_tof_link">
+    <sensor name="front_tof" type="gpu_lidar">
       <always_on>true</always_on>
-      <update_rate>50</update_rate>
+      <update_rate>20</update_rate>
       <visualize>false</visualize>
-      <topic>/bumper</topic>
-      <contact>
-        <collision>front_bumper_link_collision</collision>
-        <topic>/bumper</topic>
-      </contact>
+      <topic>/front_tof</topic>
+      <ignition_frame_id>front_tof_link</ignition_frame_id>
+      <!-- Fortress (ign-sensors 6.2+) -->
+      <gz_frame_id>front_tof_link</gz_frame_id>
+      <!-- Garden/Harmonic (+ Fortress 6.8+ fallback) -->
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>5</samples>
+            <resolution>1</resolution>
+            <min_angle>-0.2181661564992912</min_angle>
+            <max_angle>0.2181661564992912</max_angle>
+          </horizontal>
+          <vertical>
+            <samples>1</samples>
+            <resolution>1</resolution>
+            <min_angle>0</min_angle>
+            <max_angle>0</max_angle>
+          </vertical>
+        </scan>
+        <range>
+          <min>0.02</min>
+          <max>0.3</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
     </sensor>
   </gazebo>
   <!-- == Model plugins == -->
