@@ -54,6 +54,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-nav2-bringup \
     && rm -rf /var/lib/apt/lists/*
 
+# tf2 0.25.23 has a deadlock (ros2/geometry2 PR #990, fixed in 0.25.24) that freezes the
+# TF listener inside Nav2's controller_server/planner_server, so Nav2 plans but never
+# drives. The base image ships its own tf2, so upgrade it explicitly. This step never
+# fails the build; the version it ends up with is printed in the build log.
+RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade \
+    ros-humble-tf2 ros-humble-tf2-ros ros-humble-tf2-ros-py ros-humble-tf2-msgs \
+    ros-humble-tf2-py ros-humble-tf2-geometry-msgs ros-humble-tf2-eigen \
+    || echo "tf2 upgrade failed (network); Nav2 may not drive if tf2 is 0.25.23"; \
+    dpkg-query -W ros-humble-tf2 ros-humble-tf2-ros || true; \
+    rm -rf /var/lib/apt/lists/*
+
 # explore_lite (frontier exploration) has no apt package for Humble. Its source comes in
 # as a git submodule at src/third_party/m-explore-ros2 (cloned on the host, so no network
 # access is needed here) and is built by the normal "colcon build" of the workspace.
