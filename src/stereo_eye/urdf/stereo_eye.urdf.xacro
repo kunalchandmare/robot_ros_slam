@@ -9,6 +9,7 @@
     base_footprint -> base_link -> {left,right}_wheel_link (continuous)
                                 -> caster_link (fixed, rear)
                                 -> front_caster_link (fixed, front skid/caster)
+                                -> front_bumper_link (fixed, contact bumper; joint not lumped)
                                 -> ballast_link (fixed, low battery pack)
                                 -> imu_link (fixed)
                                 -> head_link (fixed) -> stereo_bar_link (fixed, rigid stereo bar)
@@ -89,6 +90,21 @@
   <xacro:property name="caster_mass" value="0.05"/>
   <xacro:property name="front_caster_x"    value="0.075"/>
   <xacro:property name="front_caster_mass" value="0.05"/>
+
+  <!-- Thin front bumper, just ahead of the front caster, used as a contact sensor.
+       Stereo depth is blind under about 0.35 m, so during exploration the robot can
+       push into a wall before the cameras see it. The plate does not touch the ground
+       (2.5 cm clearance) and is light, so the support polygon and the tip-over margins
+       barely change. -->
+  <xacro:property name="bumper_x"     value="0.010"/>
+  <xacro:property name="bumper_y"     value="0.160"/>
+  <xacro:property name="bumper_z"     value="0.060"/>
+  <xacro:property name="bumper_mass"  value="0.04"/>
+  <xacro:property name="bumper_clear" value="0.025"/>  <!-- height of the bumper underside above the ground -->
+  <!-- centre is 2 mm past the front of the front caster -->
+  <xacro:property name="bumper_off_x" value="${front_caster_x + caster_r + bumper_x/2 + 0.002}"/>
+  <!-- joint is in base_link (axle height = wheel_radius) -->
+  <xacro:property name="bumper_off_z" value="${bumper_clear + bumper_z/2 - wheel_radius}"/>
 
   <!-- Low battery / chassis ballast, sitting on the torso floor. Dense pack + base plate
        (2.40 kg in 0.120 x 0.130 x 0.050 m, ~3077 kg/m^3). Keeps the COM low. -->
@@ -382,6 +398,34 @@
     <origin xyz="${front_caster_x} 0 ${caster_r - wheel_radius}" rpy="0 0 0"/>
   </joint>
   <xacro:gazebo_ode_contact link="front_caster_link" mu="0.01"/>
+
+  <!-- Front bumper / contact plate. Collision is left unnamed so the URDF-to-SDF
+       converter (sdformat parser_urdf.cc CreateCollisions) names it
+       front_bumper_link_collision — that is the name the contact sensor must use.
+       The fixed joint is preserved (see gazebo.xacro) so lumping cannot rename it to
+       something like base_link_fixed_joint_lump__front_bumper_link_collision, which
+       would desync the sensor's <collision> reference. -->
+  <link name="front_bumper_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="${bumper_x} ${bumper_y} ${bumper_z}"/></geometry>
+      <material name="se_blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="${bumper_x} ${bumper_y} ${bumper_z}"/></geometry>
+    </collision>
+    <xacro:box_inertial m="${bumper_mass}" x="${bumper_x}" y="${bumper_y}" z="${bumper_z}">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:box_inertial>
+  </link>
+  <joint name="front_bumper_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="front_bumper_link"/>
+    <origin xyz="${bumper_off_x} 0 ${bumper_off_z}" rpy="0 0 0"/>
+  </joint>
+  <!-- Modest friction: enough to register a hit, not so sticky that it grabs the wall. -->
+  <xacro:gazebo_ode_contact link="front_bumper_link" mu="0.5"/>
 
   <!-- Internal battery / chassis ballast on the torso floor. No visual or collision: it sits
        inside the torso shell. Inertia is a solid box matching the pack size. -->

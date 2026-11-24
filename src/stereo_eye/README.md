@@ -10,7 +10,7 @@ Simulation worlds, launch files, bridges and SLAM configuration are deliberately
 
 The design is based on the user's reference robot: a boxy, white/light-grey "mecha" torso with blue accent stripes,
 a vented front chest panel, and a wide flat head bar on a short neck. For a mapping platform, the **legs and arms are removed**.
-The torso sits directly between two big drive wheels, with a small caster ball at the back and a matching one at the front (so a hard stop cannot tip it onto its face).
+The torso sits directly between two big drive wheels, with a small caster ball at the back and a matching one at the front (so a hard stop cannot tip it onto its face), and a thin blue bumper plate just in front of the forward caster.
 
 How it was made cute:
 
@@ -24,6 +24,7 @@ How it was made cute:
 | Reference styling | A blue collar band near the top and a blue bumper band at the bottom, a light-grey chest panel with 3 dark vent slits, blue vertical stripes on each side of the panel, a small sky-blue status light, a grey shoulder cap and a blue neck |
 | Wheels | Dark tyres, blue hubs, white hub caps |
 | Twin caster balls | A dark ball and a light-grey housing at both the front and the back, like little feet |
+| Front bumper | A thin blue plate just in front of the forward caster, so the robot can feel a wall that the stereo cameras cannot yet see |
 
 All visuals use **primitives only** (box / cylinder / sphere), so the URDF opens anywhere without mesh files.
 
@@ -31,7 +32,7 @@ All visuals use **primitives only** (box / cylinder / sphere), so the URDF opens
 
 | Quantity | Value |
 |---|---|
-| Length (x), front-caster front to rear-caster back | 18.5 cm |
+| Length (x), bumper front to rear-caster back | 19.7 cm |
 | Width (y), head bar incl. ear lights (widest part) | 25.5 cm |
 | Width across wheel outer faces | 22.0 cm |
 | Height to head top / to antenna tips | 30.5 cm / 34.2 cm |
@@ -39,7 +40,7 @@ All visuals use **primitives only** (box / cylinder / sphere), so the URDF opens
 | Shoulder cap / neck | 1 cm cap (18-19 cm); neck cylinder r 2.2 cm (19-21 cm) |
 | Head | 9.0 (x) × 15.0 cm flat core + two r 4.75 cm round ends (24.5 cm wide) × 9.5 cm tall, from 21 cm to 30.5 cm |
 | Ground clearance (torso) | 3.0 cm |
-| Total mass | 4.06 kg |
+| Total mass | 4.10 kg |
 
 ## 3. Link / joint tree
 
@@ -50,6 +51,7 @@ graph TD
   BL -->|right_wheel_joint continuous| RW[right_wheel_link]
   BL -->|caster_joint fixed| CA[caster_link]
   BL -->|front_caster_joint fixed| FC[front_caster_link]
+  BL -->|front_bumper_joint fixed| FB[front_bumper_link]
   BL -->|ballast_joint fixed| BA[ballast_link]
   BL -->|imu_joint fixed| IMU[imu_link]
   BL -->|head_joint fixed| HD[head_link]
@@ -68,6 +70,7 @@ graph TD
 | `left_wheel_link` / `right_wheel_link` | y = ±0.095, rpy (−π/2, 0, 0), axis z | Drive wheels. The rotation makes both wheel z-axes point to +y, so a positive joint velocity drives forward on both sides |
 | `caster_link` | x = −0.075, z = −0.0475 (sphere touches the ground) | Rear support ball (fixed; low friction μ = 0.01 in Gazebo) |
 | `front_caster_link` | x = +0.075, z = −0.0475 (sphere touches the ground) | Front support ball / skid (fixed; same size and μ = 0.01). Stops the robot pitching onto its face |
+| `front_bumper_link` | x = +0.0995, z = −0.010 in `base_link` (5.5 cm above the ground) | Thin contact plate, 1.0 × 16.0 × 6.0 cm, 2.5 cm off the ground, 2 mm in front of the front caster. The fixed joint is preserved so Gazebo does not lump it into `base_link` |
 | `ballast_link` | x = −0.025, z = −0.010 in `base_link` (5.5 cm above the ground) | Internal 2.40 kg battery pack on the torso floor (no visual or collision; it sits inside the shell) |
 | `imu_link` | z = +0.01, on the axle centreline | IMU mounting point, near the rotation centre to reduce centripetal acceleration |
 | `head_link` | z = +0.1925 | Head bar with the eye, cheeks, ears and antennas; head collision box and head mass |
@@ -116,13 +119,13 @@ ahead of the rear caster.
 
 | | Before (rear caster only) | After (front + rear casters, lower COM) |
 |---|---|---|
-| Total mass | 3.160 kg | **4.060 kg** |
-| COM in `base_footprint` | (−0.0212, 0, 0.0963) m | **(−0.0180, 0, 0.0782) m** |
+| Total mass | 3.160 kg | **4.100 kg** |
+| COM in `base_footprint` | (−0.0212, 0, 0.0963) m | **(−0.0169, 0, 0.0780) m** |
 | Front edge of the support polygon | axle, x = 0 | front caster, x = +0.075 m |
-| Static forward margin (x_front − x_COM) | 2.12 cm | **9.30 cm** |
-| Static rearward margin (x_COM − x_rear) | 5.38 cm | **5.70 cm** |
-| Forward braking at 0.5 m/s² (x_front − x_hit) | 1.63 cm (tight) | **8.91 cm** |
-| Forward accel at 0.5 m/s² (x_hit − x_rear) | 4.89 cm | **5.30 cm** |
+| Static forward margin (x_front − x_COM) | 2.12 cm | **9.19 cm** |
+| Static rearward margin (x_COM − x_rear) | 5.38 cm | **5.81 cm** |
+| Forward braking at 0.5 m/s² (x_front − x_hit) | 1.63 cm (tight) | **8.79 cm** |
+| Forward accel at 0.5 m/s² (x_hit − x_rear) | 4.89 cm | **5.41 cm** |
 
 The 1.6 cm braking margin of the old model was not enough. A bump, a collision, or a hard teleop
 press could push the weight line past the axle, and with no front support the fall could not be
@@ -133,6 +136,11 @@ real fix: it moves the front edge 7.5 cm forward of the axle, so the same 0.5 m/
 visor stays well above the ground if the robot leans onto it), and uses the same low friction so a
 fixed, non-swivelling ball does not drag the heading or fight the differential drive. The drive
 wheels keep high friction (μ = 1.2) so they can actually apply the commanded speed.
+
+The front bumper (section below) is 2.5 cm off the ground, so it is **not** part of the support
+polygon. Its 0.04 kg only nudged the COM a few millimetres (margins are within 2 mm of the
+tip-proof values before the bumper was added).
+
 
 **How the COM was lowered.** The 2.20 kg torso mass used to include the battery, and the head was
 0.35 kg of mass high up on the neck. The torso shell is now a light 0.80 kg body whose inertia sits
@@ -149,6 +157,32 @@ the plugin may only ramp those speeds at 0.5 m/s² and 1.5 rad/s². That is why 
 demand a harder stop than the support-polygon check above. The previous limits were 0.6 m/s,
 2.0 rad/s, 1.0 m/s² and 3.0 rad/s².
 
+### Front bumper contact sensor
+
+Stereo cameras estimate depth from disparity. Below about 0.35 m the eyes are effectively
+**blind**: there is no trustworthy depth, so a planner that only looks at the stereo cloud can
+drive the robot into a wall. The thin blue bumper is a *touch* sensor that sits in that dead zone,
+just in front of the front caster, and says "something is against my face" when a contact starts.
+
+| Quantity | Value |
+|---|---|
+| Size | 1.0 cm thick x 16.0 cm wide x 6.0 cm tall, 0.04 kg (light plastic plate) |
+| Pose in `base_footprint` | centre at x = +0.0995 m, z = +0.055 m; underside 2.5 cm off the ground; front face at x = +0.1045 m (2 mm past the front caster) |
+| Collision name in SDF | `front_bumper_link_collision` (the URDF collision is left unnamed; sdformat's URDF converter appends `_collision` to the link name) |
+| Why the joint is not lumped | `<preserveFixedJoint>true</preserveFixedJoint>` on `front_bumper_joint`. Without that, URDF-to-SDF lumping would merge the plate into `base_link` and rename the collision to `base_link_fixed_joint_lump__front_bumper_link_collision`. The contact sensor's `<collision>` text is not rewritten to that lumped name, so the Contact system would look for a collision that no longer exists. Both the bumper and `base_link` have mass, which the sdformat docs require for a preserved fixed joint. |
+| gz topic | **`/bumper`** (absolute). In ign-gazebo6 `Contact.cc` the topic is read from **inside** `<contact><topic>`, not from the sensor-level `<topic>` that cameras use. Both are set, so the name is unambiguous. |
+| gz message | `ignition.msgs.Contacts` (`Advertise<msgs::Contacts>`). The plugin only publishes when there *is* a contact; silence means "not touching". |
+| ROS bridge (Humble `ros_gz_bridge`) | `ros_gz_interfaces/msg/Contacts`. Example: `/bumper@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts` (or `ignition.msgs.Contacts`; Humble accepts both). |
+| World plugin | **Required.** `apartment.sdf` does not currently load it. Add the Contact system (Isekai owns the world): |
+
+```xml
+    <plugin filename="ignition-gazebo-contact-system" name="ignition::gazebo::systems::Contact"/>
+```
+
+That matches the ignition-prefixed plugin names already in the world. Declaring any world plugin
+disables Gazebo's default set, so this has to be listed explicitly next to Physics, Sensors and Imu.
+On Garden/Harmonic the equivalent is `gz-sim-contact-system` / `gz::sim::systems::Contact`.
+
 ## 5. Mass budget and inertia
 
 | Link | Mass (kg) | Inertia primitive | Ixx / Iyy / Izz (kg·m²) |
@@ -159,7 +193,8 @@ demand a harder stop than the support-polygon check above. The previous limits w
 | stereo_bar_link (bar + both camera modules) | 0.06 | box 0.025 × 0.11 × 0.03 | 6.5e-5 / 7.6e-6 / 6.4e-5 |
 | left / right wheel | 2 × 0.25 | solid cylinder r 0.065, h 0.03 | 0.000283 / 0.000283 / 0.000528 (axis z) |
 | caster_link / front_caster_link | 2 × 0.05 | solid sphere r 0.0175 | 6e-6 each |
-| **Total** | **4.06** | | |
+| front_bumper_link | 0.04 | box 0.010 × 0.160 × 0.060 | 9.73e-5 / 1.23e-5 / 8.57e-5 |
+| **Total** | **4.10** | | |
 
 The inertias are computed by the xacro macros from the standard solid-primitive formulas:
 
@@ -194,7 +229,7 @@ comes into view about 0.50 m in front of the robot. Full stereo design, topics a
 |---|---|---|
 | `se_white` | 0.96 0.96 0.97 1 | Torso, head, hub caps, eye sparkle |
 | `se_light_grey` | 0.80 0.82 0.85 1 | Chest panel, shoulder cap, eye bezel, antenna rods, caster housing |
-| `se_blue` | 0.12 0.47 0.95 1 | Collar and bumper bands, chest stripes, neck, eye rim, ear lights, brow, antenna tips, hubs |
+| `se_blue` | 0.12 0.47 0.95 1 | Collar and bumper bands, front bumper plate, chest stripes, neck, eye rim, ear lights, brow, antenna tips, hubs |
 | `se_sky` | 0.45 0.75 1.00 1 | Stereo lenses, status light |
 | `se_dark` | 0.10 0.11 0.14 1 | Vent slits, caster ball |
 | `se_glass` | 0.03 0.05 0.10 1 | Eye glass |
@@ -208,7 +243,7 @@ comes into view about 0.50 m in front of the robot. Full stereo design, topics a
 1. **Argument**: `use_gazebo` (default `true`), which includes the optional Gazebo file.
 2. **Properties**: every dimension in one place: `wheel_radius`, `wheel_width`, `wheel_separation`, `torso_x/y/z`,
    `torso_r`, `torso_off_x`, `ground_clear`, `head_x`, `head_core_y`, `head_z`, `neck_r/h`, `cap_h`, eye sizes (`eye_half`, `rim_r`, `bezel_r`, `glass_r`, `lens_r`, `eye_z`),
-   camera (`stereo_baseline`, `cam_w`, `cam_h`, `cam_fps`, `cam_hfov`, `cam_near`, `cam_far`; `cam_fx`, `cam_cx`, `cam_cy`, `cam_tx_right` are **derived**), casters (`caster_r`, `caster_x`, `front_caster_x`) and ballast (`ballast_mass`, `ballast_x/y/z`, `ballast_off_x`), and masses.
+   camera (`stereo_baseline`, `cam_w`, `cam_h`, `cam_fps`, `cam_hfov`, `cam_near`, `cam_far`; `cam_fx`, `cam_cx`, `cam_cy`, `cam_tx_right` are **derived**), casters (`caster_r`, `caster_x`, `front_caster_x`), bumper (`bumper_x/y/z`, `bumper_clear`) and ballast (`ballast_mass`, `ballast_x/y/z`, `ballast_off_x`), and masses.
    Derived heights (`torso_cz`, `torso_top`, `head_cz`, `cam_front_x`) are computed, so the stack stays connected when you change a size.
 3. **Materials**: the 8 colours above.
 4. **Inertial macros**: `box_inertial`, `cylinder_inertial`, `sphere_inertial` (mass + dimensions + origin block).
@@ -216,14 +251,14 @@ comes into view about 0.50 m in front of the robot. Full stereo design, topics a
 6. **`drive_wheel` macro** (`prefix`, `reflect`): wheel link (tyre/hub/cap visuals, cylinder collision, inertia), continuous joint
    and Gazebo friction (`mu1 = mu2 = 1.2`, via `gazebo_ode_contact`).
 7. **`stereo_eye` macro** (`side`, `reflect`): eye link + optical frame.
-8. **Links and joints**: base_footprint → base_link → wheels, rear/front casters, ballast, imu, head → camera.
+8. **Links and joints**: base_footprint → base_link → wheels, rear/front casters, front bumper, ballast, imu, head → camera.
 
 Examples:
 * Bigger wheels: change `wheel_radius`. Everything above the axle moves with it, and the caster offset is recalculated.
 * A different camera (e.g. OAK-D Lite, 75 mm): set `stereo_baseline`, `cam_hfov`, `cam_w`, `cam_h`, and `cam_fx` and `cam_tx_right` update automatically. For baselines above about 9 cm, also widen `eye_half` so the lenses stay inside the visor.
 * Heavier battery: change `ballast_mass` (and recheck that the COM stays inside the support polygon, between the two casters).
 
-Collision geometry is kept simple: torso box, head box, wheel cylinders, two caster spheres.
+Collision geometry is kept simple: torso box, head box, wheel cylinders, two caster spheres, front bumper box.
 
 ## 9. Optional Gazebo file (`urdf/stereo_eye.gazebo.xacro`)
 
@@ -234,7 +269,8 @@ simulator-agnostic. It declares:
 |---|---|
 | `stereo_left`, `stereo_right` camera sensors | On `camera_left_link` / `camera_right_link`: 640×360, 24 Hz (same rate, so same stamps), HFOV 1.5, clip 0.05–15 m, Gaussian noise σ 0.005, identical lens intrinsics + projection (right Tx = −27.48), topics `stereo/{left,right}/image_raw` + `stereo/{left,right}/camera_info`; frame = the optical frame via both `<ignition_frame_id>` (Fortress, ign-sensors 6.2+) and `<gz_frame_id>` (Garden/Harmonic) |
 | `imu_sensor` | On `imu_link` (both frame tags), 100 Hz, topic `imu`, gyro σ 0.0009 rad/s, accel σ 0.017 m/s² |
-| DiffDrive plugin | `left/right_wheel_joint`, separation 0.19, radius 0.065, limits ±0.3 m/s, ±1.0 rad/s, ±0.5 m/s², ±1.5 rad/s²; `cmd_vel` → `odom` + `wheel_tf` (odom → base_footprint) at 30 Hz. On gz (Fortress / ign-gazebo6) the absolute topic names are `/odom` and `/wheel_tf` (relative plugin names, not scoped under `/model/stereo_eye/`) |
+| `front_bumper_contact` | Contact sensor on `front_bumper_link`, collision `front_bumper_link_collision`, `/bumper` at 50 Hz (topic is set inside `<contact>` as ign-gazebo6 requires). World must load the Contact system. |
+| DiffDrive plugin | `left/right_wheel_joint`, separation 0.19, radius 0.065, limits ±0.3 m/s, ±1.0 rad/s, ±0.5 m/s², ±1.5 rad/s²; `cmd_vel` → `odom` + `wheel_tf` (odom → base_footprint) at **50 Hz**. On gz (Fortress / ign-gazebo6) the absolute topic names are `/odom` and `/wheel_tf` (relative plugin names, not scoped under `/model/stereo_eye/`) |
 | JointStatePublisher plugin | Publishes both wheel joints on `joint_states` |
 
 The wheel and caster friction tags (`mu1`/`mu2`/`kp`/`kd`/`minDepth`) live in the main xacro, next to their links. Fortress's URDF-to-SDF conversion maps those Gazebo-extension tags onto the collision `<surface>` friction and contact parameters. They are ignored by non-Gazebo tools.
@@ -288,11 +324,11 @@ The Gazebo file is included by relative path, so expansion works from both the s
 robot name is: stereo_eye
 root Link: base_footprint
   base_link ─ left_wheel_link [continuous], right_wheel_link [continuous], caster_link, front_caster_link,
-              ballast_link, imu_link,
+              front_bumper_link, ballast_link, imu_link,
               head_link ─ stereo_bar_link ─ camera_link
                                           ├ camera_left_link ─ camera_left_optical_frame
                                           └ camera_right_link ─ camera_right_optical_frame
-links: 15  joints: 14  total mass: 4.060 kg  COM: (-0.0180, 0, 0.0782) m
+links: 16  joints: 15  total mass: 4.100 kg  COM: (-0.0169, 0, 0.0780) m
 inertia tensors positive & triangle inequality: True
 optical frames: z = forward, x = right, y = down for both cameras; stereo baseline 0.080 m (TF) = -Tx/fx
 both camera sensors: identical 640x360, 24 Hz, HFOV 1.5, fx = fy = 343.50, cx = 320, cy = 180

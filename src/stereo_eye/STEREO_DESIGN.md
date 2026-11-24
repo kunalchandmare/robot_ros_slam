@@ -50,6 +50,7 @@ base_footprint                                   (ground, under the axle centre;
     ├── left_wheel_link / right_wheel_link       (continuous; DiffDrive)
     ├── caster_link                              (rear ball, μ = 0.01)
     ├── front_caster_link                        (front ball / skid, μ = 0.01)
+    ├── front_bumper_link                        (contact plate, joint preserved; /bumper)
     ├── ballast_link                             (2.40 kg battery on the torso floor)
     ├── imu_link                                 (z = +0.01 on the axle line)
     └── head_link                                (z = +0.1925)
@@ -68,7 +69,7 @@ At runtime, DiffDrive publishes `odom → base_footprint` on the gz topics `/odo
 * **Lens front height:** both optical centres are **0.2625 m above the ground** and 0.061 m ahead of the axle, level (0° pitch).
 * **Validated optical frame axes:** in `base_footprint`, x = (0, −1, 0) (right), y = (0, 0, −1) (down), z = (1, 0, 0) (forward).
   The right camera sits at **(+0.080, 0, 0)** in the left optical frame. That's the standard ROS stereo layout: right camera at +x of the left camera.
-* **Also in the tree (tip-proof update):** a front caster, a low 2.40 kg `ballast_link`, a light 0.80 kg torso shell and a 0.20 kg head. Total mass is **4.060 kg**, COM **(−0.0180, 0, 0.0782) m** in `base_footprint`. See the robot README for the support-polygon and braking-tilt numbers.
+* **Also in the tree:** a front caster, a front bumper contact plate (`front_bumper_link`, `/bumper`), a low 2.40 kg `ballast_link`, a light 0.80 kg torso shell and a 0.20 kg head. Total mass is **4.100 kg**, COM **(−0.0169, 0, 0.0780) m** in `base_footprint`. See the robot README for the support-polygon, braking-tilt and bumper notes.
   The old `head_link → camera_link → camera_*` chain became `head_link → stereo_bar_link → {camera_link, camera_left_link, camera_right_link}`.
 
 ## 3. Camera specification
@@ -136,9 +137,10 @@ Classic's single `multicamera` sensor. Exact sync can be used (`approx_sync:=fal
 | `/stereo/right/image_raw` | sensor_msgs/Image | `camera_right_optical_frame` |
 | `/stereo/right/camera_info` | sensor_msgs/CameraInfo (P[3] = −27.48) | `camera_right_optical_frame` |
 | `/imu` | sensor_msgs/Imu, 100 Hz | `imu_link` |
-| `/odom`, `/wheel_tf` (odom → base_footprint), `/joint_states` | DiffDrive / JointStatePublisher. Absolute gz names: `/odom` and `/wheel_tf` (the plugin uses the relative names `odom` and `wheel_tf`; ign-gazebo6 does not scope them under `/model/stereo_eye/`). `frame_id` is `odom`, `child_frame_id` is `base_footprint`. `/wheel_tf` is the unique wheel-odometry TF guess for the launch package to bridge; it does not collide with `/tf`. |
+| `/odom`, `/wheel_tf` (odom → base_footprint), `/joint_states` | DiffDrive / JointStatePublisher. Absolute gz names: `/odom` and `/wheel_tf` (the plugin uses the relative names `odom` and `wheel_tf`; ign-gazebo6 does not scope them under `/model/stereo_eye/`). `frame_id` is `odom`, `child_frame_id` is `base_footprint`. `/wheel_tf` is the unique wheel-odometry TF guess for the launch package to bridge; it does not collide with `/tf`. Odom is published at **50 Hz**. |
+| `/bumper` | `ignition.msgs.Contacts` from the `front_bumper_contact` sensor. Bridge with `/bumper@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts` (Humble also accepts `ignition.msgs.Contacts`). Publishes only while something is touching the plate. The world must load the Contact system (section 8). |
 
-The camera, IMU, `/odom`, `/joint_states` and `/cmd_vel` names are unchanged. `/wheel_tf` is new (it replaces the plugin's previous `tf` topic) so the launch package can bridge a wheel-odometry guess without colliding with `/tf`.
+The camera, IMU, `/odom`, `/joint_states` and `/cmd_vel` names are unchanged. `/wheel_tf` replaced the plugin's previous `tf` topic so the launch package can bridge a wheel-odometry guess without colliding with `/tf`. `/bumper` is new and needs a Contacts bridge plus the world Contact plugin.
 
 **`image_rect`.** RTAB-Map's stereo inputs are named `left/image_rect`, `right/image_rect`, `left/camera_info` and `right/camera_info`.
 The sim images have no distortion (R = identity, P = K plus Tx), so they are already rectified. **Remap `image_raw` to
@@ -210,12 +212,18 @@ driver's frames to `stereo_bar_link`), and feed RTAB-Map the driver's **rectifie
   <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
   ```
   (On Fortress these `gz-sim-*` names map to `ignition-gazebo-*`. Declaring any world plugin disables the default set, so list Physics, UserCommands and SceneBroadcaster too.)
+* **Add the Contact system, or the front bumper never publishes.** The current `apartment.sdf` already lists Physics, UserCommands, SceneBroadcaster, Sensors and Imu with ignition-prefixed Fortress names, but not Contact. Isekai should add this next to those plugins:
+
+  ```xml
+  <plugin filename="ignition-gazebo-contact-system" name="ignition::gazebo::systems::Contact"/>
+  ```
+
 * **Visual texture.** Plain-colour walls give stereo matching and loop closure few features. Add textured materials, posters or
   pictures on walls, or more varied furniture. Otherwise expect sparse disparity on walls and weak loop closures.
 
 **stereo_eye_launcher/launch/launch.py**
 * **Bridge:** the existing entries already match (`/stereo/{left,right}/image_raw`, `/stereo/{left,right}/camera_info`, `/imu`,
-  `/odom`, `/wheel_tf`, `/joint_states`, `/clock`, `/cmd_vel`). Bridge `/wheel_tf` (gz `Pose_V`) if you want the DiffDrive wheel-odometry TF as a guess for stereo odometry; do not also let a second source parent `base_footprint`. Optionally, move the image topics to `ros_gz_image image_bridge` for
+  `/odom`, `/wheel_tf`, `/joint_states`, `/clock`, `/cmd_vel`, `/bumper`). Bridge `/wheel_tf` (gz `Pose_V`) if you want the DiffDrive wheel-odometry TF as a guess for stereo odometry; do not also let a second source parent `base_footprint`. Bridge `/bumper@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts` so the explorer can stop on a hit. Optionally, move the image topics to `ros_gz_image image_bridge` for
   lower overhead, and check sensor QoS (best effort) on subscribers.
 * **Wording / version:** "Harmonic" in the comments vs Fortress in the container (section 1).
 * **Odom TF conflict:** if stereo visual odometry publishes `odom → base_footprint`, do not also use the DiffDrive `/wheel_tf` as a live TF parent (or set `publish_tf:=false` on `stereo_odometry`). `base_footprint` must have only one parent. `/wheel_tf` is still useful as a *guess* input to stereo odometry.
@@ -259,9 +267,9 @@ driver's frames to `stereo_bar_link`), and feed RTAB-Map the driver's **rectifie
 ## 9. Validation (this change)
 
 * `xacro stereo_eye.urdf.xacro` (with and without `use_gazebo:=false`) expands without errors. `stereo_eye.urdf` was regenerated.
-* `urdf_parser_py` check: single tree rooted at `base_footprint`. **15 links / 14 joints** (2 continuous wheel joints).
+* `urdf_parser_py` check: single tree rooted at `base_footprint`. **16 links / 15 joints** (2 continuous wheel joints).
   `camera_left_link` and `camera_right_link` both have parent `stereo_bar_link`.
-* Total mass 4.060 kg, COM (−0.0180, 0, 0.0782) m (was 3.160 kg, (−0.0212, 0, 0.0963) m). All inertia tensors are positive and satisfy the triangle inequality. Forward braking margin at 0.5 m/s² is 8.91 cm (was 1.63 cm with a rear-only caster).
+* Total mass 4.100 kg, COM (−0.0169, 0, 0.0780) m (was 4.060 kg, (−0.0180, 0, 0.0782) m before the bumper; originally 3.160 kg, (−0.0212, 0, 0.0963) m). All inertia tensors are positive and satisfy the triangle inequality. Forward braking margin at 0.5 m/s² is 8.79 cm. The bumper is 2.5 cm off the ground, so it is not in the support polygon.
 * Optical frames: z forward, x right, y down. The right camera is at (+0.080, 0, 0) in the left optical frame.
   TF baseline 0.080 m = −Tx/fx.
 * Both camera sensors have identical intrinsics, rate and resolution: 640×360, 24 Hz, HFOV 1.5, fx = fy = 343.50, cx = 320, cy = 180.

@@ -103,6 +103,35 @@
     </sensor>
   </gazebo>
 
+  <!-- == Front bumper contact sensor == -->
+  <!-- Keep this fixed joint in the SDF. If it were lumped, the collision would be
+       renamed (sdformat12 parser_urdf.cc: kLumpPrefix = "_fixed_joint_lump__") to
+       base_link_fixed_joint_lump__front_bumper_link_collision, and the sensor's
+       <collision> text would not be rewritten to that name — ign-gazebo6's Contact
+       system would then find no matching collision on the parent link.
+       preserveFixedJoint (preferred over disableFixedJointLumping) keeps a real
+       fixed joint; both parent and child have mass, which the sdformat docs require. -->
+  <gazebo reference="front_bumper_joint">
+    <preserveFixedJoint>true</preserveFixedJoint>
+  </gazebo>
+
+  <gazebo reference="front_bumper_link">
+    <!-- ign-gazebo6 Contact.cc reads <topic> from INSIDE <contact>, not from the
+         sensor-level <topic> used by cameras. Both are set so the absolute gz topic
+         is /bumper. Message type: ignition.msgs.Contacts (Advertise<msgs::Contacts>).
+         The world must load the Contact system or nothing is published. -->
+    <sensor name="front_bumper_contact" type="contact">
+      <always_on>true</always_on>
+      <update_rate>50</update_rate>
+      <visualize>false</visualize>
+      <topic>/bumper</topic>
+      <contact>
+        <collision>front_bumper_link_collision</collision>
+        <topic>/bumper</topic>
+      </contact>
+    </sensor>
+  </gazebo>
+
   <!-- == Model plugins == -->
   <gazebo>
     <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
@@ -131,7 +160,7 @@
       <tf_topic>wheel_tf</tf_topic>
       <frame_id>odom</frame_id>
       <child_frame_id>base_footprint</child_frame_id>
-      <odom_publish_frequency>30</odom_publish_frequency>
+      <odom_publish_frequency>50</odom_publish_frequency>
     </plugin>
 
     <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
