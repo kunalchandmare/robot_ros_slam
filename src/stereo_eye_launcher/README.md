@@ -742,10 +742,10 @@ it to ROS. It is used twice:
   touching): the stuck recovery (below) fires at once and backs up
   (`tof_too_close_m`, default 0.04 m).
 
-Readings of exactly 0.02 m are ignored. 0.02 m is the sensor's smallest range
-(`range_min`), and Gazebo turns any too-small value into exactly that number
-instead of a real distance. In Kunal's test the sensor reported 0.02 m all the
-time, even after the robot had backed away and turned, which caused the
+Readings of exactly the sensor's smallest range (`range_min`, 0.01 m since
+MechaX's update; it was 0.02 m) are ignored: Gazebo turns any too-small value
+into exactly that number instead of a real distance. In Kunal's test the
+sensor reported 0.02 m (the old `range_min`) all the time, even after the robot had backed away and turned, which caused the
 endless back-up loop.
 
 **Stuck recovery.** If the robot still gets too close or ends up pushing into
@@ -814,7 +814,7 @@ other, again and again. Kunal's log showed where that came from:
 To check the ToF sensor, drive the robot towards a wall by hand (without
 `explore:=true`) and run `ros2 topic echo /front_tof --field ranges`: the
 numbers drop below 0.30 as the wall gets close, and show `inf` when nothing is
-in range. The smallest number it can show is its `range_min` (0.02 m); that
+in range. The smallest number it can show is its `range_min` (0.01 m); that
 must stay below `tof_too_close_m` (0.04 m), or the 4 cm trigger can never
 fire. If the topic changes, set the `stuck_recovery` parameter
 `tof_topic` (and the `front_tof` source in `config/nav2_params.yaml`).
@@ -893,7 +893,14 @@ How "done" is detected: explore_lite publishes its state on `/explore/status`
 (`explore_lite_msgs/msg/ExploreStatus`). When it finds no frontiers left, it
 prints `No frontiers found, stopping.` or `All frontiers traversed/tried out,
 stopping.` and publishes `exploration_complete`. `explore_map_saver.py` waits
-for exactly that message, then runs `map_saver_cli`. You can watch it with:
+for exactly that message, then runs `map_saver_cli`. One exception: a
+"complete" in the first 60 s, or while the map knows less than 4 m² (only the
+cameras' first view), is a false alarm at start-up. Then it prints
+`[EXPLORE] Map still tiny (... m2 known after ... s), looking around and
+restarting exploration (try 1 of 3)`, turns the robot once on the spot (about
+20 s) so the cameras see the room, and restarts explore_lite
+(`[EXPLORE] Restarting exploration`). After 3 such tries it saves the map
+anyway. You can watch the status with:
 
 ```bash
 ros2 topic echo /explore/status
@@ -972,8 +979,8 @@ grep -E "STUCK|TOO CLOSE|NO PATH|Running spin|Running backup|Failed to make prog
 ```
 
 Also check the ToF sensor with the robot standing in open space:
-`ros2 topic echo /front_tof --field ranges` should print `inf` for all five
-numbers. If it prints `0.02`, the sensor gives fake readings (MechaX's model);
+`ros2 topic echo /front_tof --field ranges` should print `inf` for all 33
+numbers (11 x 3 rays). If it prints `0.01` (its `range_min`), the sensor gives fake readings (MechaX's model);
 they are ignored now, but then the sensor is blind and only the stereo
 cameras protect the front.
 
@@ -1000,11 +1007,20 @@ next frame and continues from the last position, so the map stays one piece;
 it may shift a little. The robot then usually continues. If the map is badly
 broken, stop and start again.
 
+**The robot turns once on the spot right after start.** That is expected:
+explore_lite often finds no frontier in the very first camera view and says
+"No frontiers found" within a second. The map saver notices that
+(`[EXPLORE] Map still tiny ...`), turns the robot a full circle so the map
+grows, and restarts exploration. If you see `try 3 of 3` followed by
+`saving it anyway`, the cameras did not build a map while turning: check
+`/map` in RViz and the `stereo_odometry` lines (`quality=0` means it is lost).
+
 **Exploration ends too early ("No frontiers found").** This happens when the
 map is still small, or when the frontiers left are smaller than
-`min_frontier_size` (0.75 m in `config/explore_params.yaml`), or when every
+`min_frontier_size` (0.3 m in `config/explore_params.yaml`; it was 0.75 m for
+one version, which stopped exploration right at start-up), or when every
 frontier got blacklisted (`All frontiers traversed/tried out`). A map is saved
-anyway. To continue exploring, resume explore_lite:
+anyway (except at start-up, see above). To continue exploring, resume explore_lite:
 
 ```bash
 ros2 topic pub --once /explore/resume std_msgs/msg/Bool "{data: true}"

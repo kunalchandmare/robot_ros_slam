@@ -13,18 +13,21 @@ after exploration had already ended, because of a false ToF reading.)
 When is the robot "stuck"? Any of:
   1. [TOO CLOSE] (the main trigger): the front time-of-flight (ToF) range
      sensor (tof_topic, default /front_tof, sensor_msgs/msg/LaserScan from a
-     Gazebo gpu_lidar, range_min 0.02 m, range_max 0.30 m) measures something
+     Gazebo gpu_lidar, range_min 0.01 m since MechaX 501ef3f (was 0.02),
+     range_max 0.30 m) measures something
      closer than tof_too_close_m (0.04 m) WHILE Nav2 is driving the robot
      forward (a /cmd_vel with linear.x > tof_push_speed, 0.02 m/s, in the last
      0.5 s). Standing still or turning on the spot next to a wall is fine
      (the robot is round), so that never triggers a back-up.
      A reading counts only if it is finite, ABOVE range_min + tof_min_margin
-     (0.02 + 0.005 m) and below tof_too_close_m. Why the margin: Gazebo
+     (now 0.01 + 0.005 m; the scan's own range_min is used) and below
+     tof_too_close_m. Why the margin: Gazebo
      (gz-sensors 6, Lidar::Clamp) clamps every finite range below range_min
      UP to exactly range_min. The real "too close" case gives -inf instead
      (gpu_rays shader), so a reading of exactly range_min is never a real
      measurement; it is a rendering artefact (in Kunal's log every reading was
-     exactly 0.02 m, even after backing up 20 cm and turning 90 deg).
+     exactly 0.02 m, the range_min then, even after backing up 20 cm and
+     turning 90 deg).
      "No echo" readings (inf) never count either.
   2. [STUCK] pushing without moving (a conservative backup): /cmd_vel (after
      Nav2's velocity smoother) has asked to drive FORWARD faster than

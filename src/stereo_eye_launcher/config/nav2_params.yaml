@@ -58,7 +58,7 @@
 # walls block matching fails earlier, so in practice anything closer than
 # about 0.35 m in front of the cameras is invisible. The layer therefore keeps
 # obstacles it saw from further away (marks stay until a ray clears them), and
-# the front ToF sensor (local costmap) covers exactly that zone, 0.02-0.30 m
+# the front ToF sensor (local costmap) covers exactly that zone, 0.01-0.30 m
 # in front of the robot's nose.
 #
 # Only non-default or important settings are listed; Nav2 fills in the rest.
@@ -239,7 +239,7 @@ local_costmap:
       #                stuck_recovery.py backs up instead (tof_too_close_m).
       #
       # Why the ToF stays in the costmap (and keeps its full 0.30 m): it does
-      # not make the robot timid. Its 5 beams cover only +/-12.5 deg straight
+      # not make the robot timid. Its rays (11 x 3 since MechaX 501ef3f) cover only +/-12.5 deg straight
       # ahead, at 5.5 cm height, from the robot's nose. Driving through the
       # middle of a 0.356 m door, a jamb 0.178 m to the side would only enter
       # the beam about 0.75 m ahead, beyond its 0.30 m range, so door frames
@@ -272,8 +272,10 @@ local_costmap:
           inf_is_valid: False
           obstacle_max_range: 0.30    # (m) = sensor range (unchanged, see above)
           # (m) was 0.0. Gazebo clamps every finite reading below range_min
-          # (0.02 m) UP to exactly 0.02 m (gz-sensors 6, Lidar::Clamp), and
-          # Kunal's log showed constant 0.02 m readings that were not real.
+          # UP to exactly range_min (gz-sensors 6, Lidar::Clamp), and Kunal's
+          # log showed constant readings of the range_min (then 0.02 m) that
+          # were not real. range_min is 0.01 m since MechaX 501ef3f; the
+          # 0.025 m cut-off stays (unchanged, minimal fix).
           # So anything at or below 0.025 m from the sensor is ignored. (Such
           # points would lie inside the robot circle and be erased by
           # footprint clearing anyway, but this keeps them out entirely.)

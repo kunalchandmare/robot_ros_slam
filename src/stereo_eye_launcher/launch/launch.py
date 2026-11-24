@@ -678,7 +678,7 @@ def generate_launch_description():
             'tof_topic': '/front_tof',
             # (m) recovery only below 4 cm, and only while driving forward;
             # the costmap steers away from anything 0.04-0.30 m ahead.
-            # Readings of exactly range_min (0.02 m) are ignored as a Gazebo
+            # Readings of exactly range_min (0.01 m, was 0.02) are ignored as a Gazebo
             # clamp artefact (tof_min_margin, see the script).
             'tof_too_close_m': 0.04,
         }],
@@ -686,7 +686,10 @@ def generate_launch_description():
     )
 
     # Saves /map with nav2_map_server's map_saver_cli as soon as explore_lite
-    # publishes "exploration_complete" on /explore/status.
+    # publishes "exploration_complete" on /explore/status. A "complete" in the
+    # first 60 s or with less than 4 m2 of known map is treated as a start-up
+    # false alarm instead: the node turns the robot once on the spot and
+    # restarts explore_lite (up to 3 times). Defaults live in the script.
     map_saver = Node(
         package='stereo_eye_launcher',
         executable='explore_map_saver.py',
