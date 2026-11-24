@@ -80,10 +80,13 @@ Visualization Manager:
         Value: /cloud_map
 
     # Visual odometry from rtabmap stereo_odometry (wheel odom is /wheel_odom)
+    # Keep: 1 (was 100) shows only the current pose arrow. With 100, turning
+    # on the spot left a fan of arrows that looked like a controller drawing
+    # candidate trajectories.
     - Class: rviz_default_plugins/Odometry
       Name: Odometry
       Enabled: true
-      Keep: 100
+      Keep: 1
       Topic:
         Value: /odom
 

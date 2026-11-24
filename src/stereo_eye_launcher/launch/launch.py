@@ -278,8 +278,8 @@ def generate_launch_description():
             '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
             # Front time-of-flight range sensor (gpu_lidar in
             # stereo_eye.gazebo.xacro, MechaX), 0.30 m range, covering the
-            # stereo blind zone. Read by the local costmap (obstacles 0.15 to
-            # 0.30 m away) and stuck_recovery.py (closer than 0.15 m).
+            # stereo blind zone. Read by the local costmap (obstacles 0.04 to
+            # 0.30 m away) and stuck_recovery.py (closer than 0.04 m).
             # Harmless if the sensor is not in the model yet (no messages).
             '/front_tof@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
         ],
@@ -403,7 +403,11 @@ def generate_launch_description():
     #   Grid/Sensor 1       Build the grid from stereo depth (no laser).
     #   Grid/3D false       2D grid cells only (no OctoMap), which is lighter
     #                       and makes /map come straight from 2D local grids.
-    #   Grid/CellSize 0.05  5 cm cells (same as the Nav2 costmaps).
+    #   Grid/CellSize 0.025 2.5 cm cells (was 0.05; same as the Nav2
+    #                       costmaps). With 5 cm cells a door only 10 cm
+    #                       wider than the robot usually shows up 5 cm too
+    #                       narrow and Nav2 will not drive through it; see
+    #                       config/nav2_params.yaml. Saved maps are finer too.
     #   Grid/RangeMax 4.0   Use depth up to 4 m. Stereo depth error grows with
     #                       distance squared: with fx 343.5 px and a 0.08 m
     #                       baseline one pixel of disparity is about 0.58 m at
@@ -445,7 +449,7 @@ def generate_launch_description():
             'RGBD/ProximityBySpace': 'true',
             'Grid/Sensor': '1',  # 1 = depth (from stereo); was Grid/FromDepth true
             'Grid/3D': 'false',
-            'Grid/CellSize': '0.05',
+            'Grid/CellSize': '0.025',  # was 0.05, see above
             'Grid/RangeMax': '4.0',
             'Grid/RayTracing': 'true',
             'Grid/NormalsSegmentation': 'false',
@@ -603,7 +607,10 @@ def generate_launch_description():
     #                       (16x fewer points; the disparity itself is still
     #                       computed at full 640x360 for accuracy)
     #   max_depth 3.0       drop points further than 3 m (too noisy)
-    #   voxel_size 0.05     one point per 5 cm cube (= costmap cell size)
+    #   voxel_size 0.05     one point per 5 cm cube (2 costmap cells of
+    #                       2.5 cm; kept at 5 cm so the noise filter below
+    #                       behaves as before. Inflation closes the 2.5 cm
+    #                       gaps between marked cells.)
     #   noise_filter_radius 0.1 / min_neighbors 5: drop lonely points (stereo
     #                       speckles) that would show up as fake obstacles
     #   StereoBM/NumDisparities 128 (rtabmap's default, set explicitly): the
@@ -639,8 +646,9 @@ def generate_launch_description():
     )
 
     # Stuck watchdog (explore:=true only): notices the front ToF sensor seeing
-    # something, or /cmd_vel asking to drive while visual odometry (/odom)
-    # does not move, then makes
+    # something closer than 4 cm (the main trigger), or, as a conservative
+    # backup, /cmd_vel asking to drive forward for 5 s while visual odometry
+    # (/odom) does not move, then makes
     # explore_lite give up that frontier, backs up 0.2 m, turns ~90 degrees
     # and lets exploration continue. All thresholds are parameters of the node
     # (see the header of scripts/stuck_recovery.py). /front_tof comes from
@@ -653,7 +661,9 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': use_sim_time,
             'tof_topic': '/front_tof',
-            'tof_too_close_m': 0.15,     # (m) recovery below this; costmap handles 0.15-0.30 m
+            # (m) was 0.15: recovery only below 4 cm; the costmap steers away
+            # from anything 0.04-0.30 m ahead.
+            'tof_too_close_m': 0.04,
         }],
         condition=IfCondition(explore),
     )

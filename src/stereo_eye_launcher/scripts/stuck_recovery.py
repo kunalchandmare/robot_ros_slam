@@ -4,31 +4,43 @@
 Started by launch.py only when explore:=true.
 
 When is the robot "stuck"? Either of:
-  1. Too close: the front time-of-flight (ToF) range sensor (tof_topic,
-     default /front_tof, sensor_msgs/msg/LaserScan from a Gazebo gpu_lidar,
-     0.30 m range) measures something closer than tof_too_close_m (default
-     0.15 m). It covers the stereo blind zone right in front of the robot.
-     A reading counts if it is finite, >= range_min and < tof_too_close_m;
-     tof_too_close_m <= 0 means "use the scan's range_max" instead. "No echo"
-     readings (inf) never count. The recovery starts at once, no waiting.
-     Between 0.15 and 0.30 m the ToF sensor only feeds Nav2's local costmap
-     (nav2_params.yaml), which steers the robot away; this node fires only
-     when that was not enough.
-  2. Pushing without moving: the speed command that reaches the robot
-     (/cmd_vel, after Nav2's velocity smoother) has been faster than
-     min_cmd_speed (0.05 m/s) for stuck_time (2 s), but the VISUAL odometry
-     pose (/odom from stereo_odometry) moved less than min_progress (3 cm).
+  1. Too close (the MAIN trigger): the front time-of-flight (ToF) range
+     sensor (tof_topic, default /front_tof, sensor_msgs/msg/LaserScan from a
+     Gazebo gpu_lidar, 0.02-0.30 m range) measures something closer than
+     tof_too_close_m (default 0.04 m, was 0.15 m), i.e. the robot's nose is
+     practically touching it. A reading counts if it is finite,
+     >= range_min and < tof_too_close_m; tof_too_close_m <= 0 means "use the
+     scan's range_max" instead. "No echo" readings (inf) never count. The
+     recovery starts at once, no waiting. Between 0.04 and 0.30 m the ToF
+     sensor only feeds Nav2's local costmap (nav2_params.yaml), which steers
+     the robot away; this node fires only when that was not enough.
+     Note: this needs the scan's range_min (0.02 m in MechaX's xacro) to be
+     below tof_too_close_m, otherwise no reading can ever count.
+  2. Pushing without moving (a CONSERVATIVE backup): the speed command that
+     reaches the robot (/cmd_vel, after Nav2's velocity smoother) has asked
+     to drive FORWARD faster than min_cmd_speed (0.08 m/s, was 0.05) without
+     a single slower command for stuck_time (5 s, was 2 s), but the VISUAL
+     odometry pose (/odom from stereo_odometry) moved less than min_progress
+     (5 cm, was 3 cm; the command alone would have moved it >= 0.4 m).
+     Turning in place (linear speed ~0), slowing down, hesitating or Nav2's
+     own back-up manoeuvre (negative speed) all reset the timer, so they can
+     never make the robot reverse.
      Wheel odometry (/wheel_odom) is not used on purpose: when the wheels slip
      against a wall, wheel odometry still "drives", the cameras do not.
-     If visual odometry sends nothing at all for odom_timeout while pushing
-     (it often gets lost with a wall right in front of the cameras), that also
-     counts as not moving (treat_lost_odom_as_stuck).
+     If visual odometry sends nothing at all while pushing, that only counts
+     as "not moving" with treat_lost_odom_as_stuck:=true (default now False:
+     losing visual tracking is not proof of being stuck, and the wall-in-
+     front case that loses tracking is caught by the ToF trigger).
 
 What happens then:
   The same reading cannot fire twice: ToF readings are ignored while a
   recovery runs and during the cooldown after it.
 
-  a. Make explore_lite give up on its current frontier. Simply cancelling the
+  a. Send one zero speed command at once (and keep sending zeros until the
+     back-up starts), so the robot stops right away instead of driving on
+     while Nav2 processes the abort. Nav2's own last commands are zero or
+     decelerating at that point, so the two do not fight.
+     Make explore_lite give up on its current frontier. Simply cancelling the
      Nav2 goal does NOT work: explore_lite (m-explore-ros2 326cf8a,
      Explore::reachedGoal) ignores CANCELED goals ("might be because
      exploration stopped") and later sends the same frontier again. It only
@@ -91,16 +103,18 @@ class StuckRecovery(Node):
         self.cmd_vel_topic = p('cmd_vel_topic', '/cmd_vel').value
         self.odom_topic = p('odom_topic', '/odom').value
         self.tof_topic = p('tof_topic', '/front_tof').value
-        self.tof_too_close_m = p('tof_too_close_m', 0.15).value     # m; <= 0: use range_max
+        self.tof_too_close_m = p('tof_too_close_m', 0.04).value     # m (was 0.15); <= 0: use range_max
         self.map_frame = p('map_frame', 'map').value
         self.base_frame = p('base_frame', 'base_footprint').value
         self.nav_action = p('navigate_action', 'navigate_to_pose').value
         # Detection thresholds
-        self.min_cmd_speed = p('min_cmd_speed', 0.05).value        # m/s
-        self.stuck_time = p('stuck_time', 2.0).value                # s
-        self.min_progress = p('min_progress', 0.03).value           # m
+        # Conservative on purpose: the ToF trigger is the main one.
+        self.min_cmd_speed = p('min_cmd_speed', 0.08).value        # m/s forward (was 0.05)
+        self.stuck_time = p('stuck_time', 5.0).value                # s (was 2.0)
+        self.min_progress = p('min_progress', 0.05).value           # m (was 0.03)
         self.odom_timeout = p('odom_timeout', 1.0).value            # s
-        self.treat_lost_odom_as_stuck = p('treat_lost_odom_as_stuck', True).value
+        # was True; see the header: lost tracking alone is not "stuck"
+        self.treat_lost_odom_as_stuck = p('treat_lost_odom_as_stuck', False).value
         # Recovery motion
         self.backup_distance = p('backup_distance', 0.2).value      # m
         self.backup_speed = p('backup_speed', 0.05).value           # m/s
@@ -136,8 +150,9 @@ class StuckRecovery(Node):
 
         self.create_timer(0.1, self.tick)  # 10 Hz: detection and recovery motion
         self.get_logger().info(
-            f'Watching for a stuck robot: {self.tof_topic} sees something, '
-            f'or {self.cmd_vel_topic} > {self.min_cmd_speed} m/s for {self.stuck_time} s '
+            f'Watching for a stuck robot: {self.tof_topic} closer than '
+            f'{self.tof_too_close_m} m, or {self.cmd_vel_topic} forward > '
+            f'{self.min_cmd_speed} m/s for {self.stuck_time} s '
             f'with {self.odom_topic} moving < {self.min_progress} m')
 
     # ---------- inputs ----------
@@ -156,7 +171,9 @@ class StuckRecovery(Node):
             return  # our own recovery commands, or Nav2 winding down
         now = self.now()
         self.last_cmd_time = now
-        if abs(msg.linear.x) > self.min_cmd_speed:
+        # Only a steady FORWARD push counts. Turning in place (linear ~0),
+        # slowing down or backing up (negative) restarts the timer.
+        if msg.linear.x > self.min_cmd_speed:
             if self.cmd_since is None:
                 self.cmd_since = now
         else:
@@ -239,12 +256,14 @@ class StuckRecovery(Node):
             elif stuck:
                 self.start_recovery('[STUCK]', f'Robot {reason}')
         elif self.phase == PREEMPT:
+            self.publish_cmd()  # keep the robot stopped while Nav2 lets go
             if now >= self.phase_end:
                 if self.exploring():
                     self.resume_pub.publish(Bool(data=False))  # pause; cancels our goal too
                     self.paused_explore = True
                 self.enter(SETTLE, self.settle_time)
         elif self.phase == SETTLE:
+            self.publish_cmd()  # same: zeros only, until the back-up starts
             if now >= self.phase_end:
                 self.enter(BACKUP, self.backup_distance / max(self.backup_speed, 1e-3))
         elif self.phase == BACKUP:
@@ -283,6 +302,7 @@ class StuckRecovery(Node):
             f'{tag} {what} at {where}: backing up and choosing another frontier')
         self.cmd_since = None
         self.too_close = None
+        self.publish_cmd()  # (a) stop now
         # (a) Replace explore_lite's goal with ours so Nav2 aborts it -> blacklisted.
         if pose is not None and self.nav_client.server_is_ready():
             goal = NavigateToPose.Goal()
