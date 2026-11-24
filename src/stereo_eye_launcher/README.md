@@ -690,9 +690,13 @@ the steering window uses.
 **Live obstacles.** Besides rtabmap's map, Nav2 now also looks at a live
 point cloud computed from the two camera images (node
 `stereo_obstacle_cloud`, rtabmap_util `point_cloud_xyzrgb`). Points between
-5 cm and 40 cm above the floor and up to 2.5 m away are marked as obstacles
+10 cm and 40 cm above the floor and up to 2.5 m away are marked as obstacles
 in both costmaps right away, without waiting for rtabmap's map update. Floor
 points are used to erase old obstacles that are no longer there.
+Points lower than 10 cm are ignored on purpose: stereo depth on the floor next
+to walls is noisy, and those stray points used to show up as fake obstacles
+around the robot, which made it hesitate. Low things right in front of the
+robot are caught by the ToF sensor instead (its beam is 5.5 cm high).
 
 **The blind zone.** Stereo depth works by finding the same spot in the left
 and the right image. Very close to the cameras (closer than about 0.35 m in
@@ -701,9 +705,9 @@ nothing is measured, so a wall that close is invisible. That is why:
 
 - obstacles seen from further away are **kept** in the costmap while the robot
   gets closer,
-- the robot counts as 0.25 m wide in radius (0.15 m body + 0.10 m margin), and
-  the path follower checks about 1.5 s ahead and **stops** when the robot would
-  touch an obstacle. It usually stops with its body 0.1 to 0.3 m from a wall,
+- the front ToF sensor covers exactly that zone (below),
+- the path follower checks about 1 s ahead and **stops** when the robot would
+  touch an obstacle,
 - Nav2's recoveries no longer wipe obstacles within 0.75 m of the robot.
 
 **Front ToF sensor.** MechaX's front time-of-flight range sensor (Gazebo
@@ -711,22 +715,31 @@ nothing is measured, so a wall that close is invisible. That is why:
 looks straight ahead, right inside the stereo blind zone. `launch.py` bridges
 it to ROS. It is used twice:
 
-- **0.15 to 0.30 m:** Nav2's local costmap marks what it sees as an obstacle,
-  so the robot slows down and steers away.
-- **closer than 0.15 m:** the stuck recovery (below) fires at once and backs
-  up (`tof_too_close_m`, default 0.15 m).
+- **0.04 to 0.30 m:** Nav2's local costmap marks what it sees as an obstacle,
+  so the robot slows down and steers away. The beam is narrow (25 degrees,
+  straight ahead), so it never sees door frames or walls beside the robot and
+  does not make it timid; it only sees what is really in front of the nose.
+- **closer than 0.04 m** (the nose is practically touching): the stuck
+  recovery (below) fires at once and backs up (`tof_too_close_m`, default
+  0.04 m).
 
 **Stuck recovery.** If the robot still gets too close or ends up pushing into
 something, the `stuck_recovery` node notices it. It reacts when either:
 
-- the front ToF sensor measures something closer than 0.15 m (immediately), or
-- Nav2 has asked the robot to drive (faster than 0.05 m/s) for 2 s while the
-  camera-based position (visual odometry) moved less than 3 cm. The wheels are
-  not trusted for this, because they keep turning when they slip.
+- the front ToF sensor measures something closer than 4 cm (immediately; this
+  is the main trigger), or
+- as a careful backup: Nav2 has asked the robot to drive **forward** at
+  0.08 m/s or more, without a break, for 5 s, while the camera-based position
+  (visual odometry) moved less than 5 cm. At that speed it should have moved
+  at least 40 cm. The wheels are not trusted for this, because they keep
+  turning when they slip.
+
+Turning on the spot, slowing down or pausing for a moment never counts as
+stuck, so hesitating can no longer make the robot reverse.
 
 It then:
 
-1. prints `[TOO CLOSE] Something is 12 cm in front of the robot at (x, y):
+1. stops at once and prints `[TOO CLOSE] Something is 3 cm in front of the robot at (x, y):
    backing up and choosing another frontier` or `[STUCK] Robot pushing into a
    wall at (x, y): backing up and choosing another frontier`,
 2. tells explore_lite to give up that frontier (it turns red in RViz),
@@ -739,8 +752,66 @@ parameters of the node; see the top of `scripts/stuck_recovery.py`.
 To check the ToF sensor, drive the robot towards a wall by hand (without
 `explore:=true`) and run `ros2 topic echo /front_tof --field ranges`: the
 numbers drop below 0.30 as the wall gets close, and show `inf` when nothing is
-in range. If the topic changes, set the `stuck_recovery` parameter
+in range. The smallest number it can show is its `range_min` (0.02 m); that
+must stay below `tof_too_close_m` (0.04 m), or the 4 cm trigger can never
+fire. If the topic changes, set the `stuck_recovery` parameter
 `tof_topic` (and the `front_tof` source in `config/nav2_params.yaml`).
+
+### Why the robot fits through doors
+
+Nav2 thinks of the robot as a **circle**, and keeps that circle out of
+walls. Earlier it used a 0.25 m radius (a guessed 0.15 m body plus 0.10 m
+extra), so for Nav2 the robot was 0.5 m wide, and doors and gaps under
+0.6 m were "closed". Now the numbers come from MechaX's robot model
+(`src/stereo_eye/urdf/stereo_eye.urdf.xacro`):
+
+| Part of the robot             | Distance from the centre |
+|-------------------------------|--------------------------|
+| Head with its round ends      | 0.128 m to each side (the widest part) |
+| Wheels                        | 0.112 m to each side     |
+| Front (ToF housing)           | 0.116 m ahead            |
+| Back (rear caster)            | 0.097 m behind           |
+
+So the robot is 0.256 m wide and almost round. Nav2's circle is now
+**0.15 m** (`robot_radius`): the real 0.128 m plus about 2 cm.
+
+Instead of a big hard margin there is now a soft one, the **inflation**: the
+closer a cell is to a wall, the more "expensive" it is, so the planner prefers
+the middle of a gap but may still use a narrow one. The cost is
+
+`cost = 252 x e^(-6 x (distance to the wall - 0.15 m))`, and 0 beyond 0.35 m.
+
+Example, a door 0.356 m wide (robot width + 10 cm):
+
+| Where in the door              | Distance to the nearer side | Cost |
+|--------------------------------|-----------------------------|------|
+| exactly in the middle          | 0.178 m                     | 213  |
+| 2.5 cm off the middle          | 0.153 m                     | 247  |
+| 3 cm or more off the middle    | under 0.15 m                | 253 = "would touch", not allowed |
+
+253 and above means "blocked", so the middle (213) is open and is the
+cheapest line through the door, which is the one the planner takes.
+
+**Why the map cells are smaller now.** The map and the costmaps are made of
+square cells. With 5 cm cells, a 0.356 m door usually shows up as only six
+free cells (0.30 m), because the cells rarely line up with the door frame, and
+then it is too narrow. The cells are now **2.5 cm** (rtabmap `Grid/CellSize`
+and the costmaps' `resolution`), and the door is open in every position. The
+saved map files have 2.5 cm pixels as a result.
+
+**Driving more decisively.** The path follower (Regulated Pure Pursuit) was
+also loosened:
+
+- it turns on the spot only when the path is more than 60 degrees to the side
+  (was 45); otherwise it drives on a curve,
+- it looks 0.45 m ahead on the path (was 0.4), which gives smoother driving,
+- it slows down near obstacles only within 0.25 m (was 0.4 m), and never goes
+  slower than 0.08 m/s while driving (was 0.05),
+- it looks 1 s ahead for collisions (was 1.5 s), so one fake point further away
+  no longer freezes it,
+- a goal counts as reached within 0.30 m (was 0.25), and Nav2 gives up on a
+  goal after 10 s without moving 10 cm (was 15 s), so explore_lite picks
+  another frontier sooner.
 
 ### Where the map is saved
 
@@ -752,7 +823,7 @@ When explore_lite reports that exploration is complete, the map is saved to
 ```
 
 The `.pgm` is the picture (white = free, black = wall, grey = unknown) and
-the `.yaml` says how big a pixel is (0.05 m) and where the map's corner sits.
+the `.yaml` says how big a pixel is (0.025 m) and where the map's corner sits.
 Change the folder or prefix with `maps_dir:=...` and `map_name:=...`. The
 terminal prints `Map saved: ...` when it is done.
 
@@ -788,7 +859,7 @@ mapping. Check that the camera images show up in RViz and that
 
 **The robot is stuck against furniture or turning on the spot.** Nav2 first
 tries recoveries (clear the costmap, spin, wait, back up). If Nav2 gives up
-(the robot moved less than 10 cm in 15 s) or explore_lite sees no progress for
+(the robot moved less than 10 cm in 10 s) or explore_lite sees no progress for
 60 s, that frontier is put on a blacklist (it turns red) and explore_lite picks
 another one. If it is truly wedged, put it back with the
 `set_pose` command in [Troubleshooting](#troubleshooting), and expect the map
@@ -819,18 +890,30 @@ messages appear and it backs up by itself. If not:
   should be covered with dots. Plain walls without texture give few dots.
 - Check that the stuck watchdog runs: the terminal shows `Watching for a stuck
   robot` at start-up.
-- Check the front ToF sensor: `ros2 topic hz /front_tof` should show messages.
-  If there are none, the robot model does not have the sensor yet (MechaX) and
-  only the 2 s "pushing without moving" check protects the robot.
+- Check the front ToF sensor: `ros2 topic hz /front_tof` should show messages
+  (about 20 Hz). If there are none, the robot model does not have the sensor
+  (MechaX) and only the slow 5 s "pushing without moving" check protects the
+  robot.
 - If `[STUCK]` repeats again and again in the same place, the robot is boxed
   in; stop the launch, move it with `set_pose` (see
   [Troubleshooting](#troubleshooting)) and start again.
 
-**The robot stops too far from walls or refuses to go through a door.** The
-safety margin makes the robot 0.5 m wide for Nav2. Openings narrower than
-about 0.6 m are treated as closed. Fake obstacles from noisy stereo points can
-also block a doorway for a while; they are erased when the robot sees the
-floor behind them.
+**The robot stops too far from walls or refuses to go through a door.** This
+was tuned (see [Why the robot fits through doors](#why-the-robot-fits-through-doors)):
+openings from about 0.36 m (robot width + 10 cm) should now be passable. If
+one is still refused:
+
+- Tick **Global Costmap** in RViz and look at the door. If a dark (lethal)
+  spot sits in the gap, it is a fake obstacle from noisy stereo points; it is
+  erased when the robot sees the floor behind it. If the walls of the door
+  look thick or doubled in the grey map, the map is the problem (stereo depth
+  gets blurry far away): drive closer, or lower `Grid/RangeMax` in `launch.py`.
+- If the robot hesitates in front of the gap and then gives up, the terminal
+  shows `Failed to make progress` (10 s without moving 10 cm) or
+  `collision ahead`. Both make explore_lite try another frontier, which is
+  fine; it often comes back to the door from a better angle.
+- If RViz shows a fan of arrows around the robot: that is just the Odometry
+  display's history (it now keeps only 1 arrow), not the controller.
 
 **Visual odometry got lost.** Signs are `Not enough inliers` from
 `stereo_odometry` and a map that stops growing. Odometry resets itself on the
@@ -862,11 +945,17 @@ good enough, then stop the launch.
   caught by the front ToF sensor (straight ahead only, 0.30 m) or the stuck
   check.
 - **ToF only looks straight ahead** (narrow field of view). A corner or table
-  leg slightly to the side is missed; then only the "pushing without moving" check (about 2 s)
-  helps.
+  leg slightly to the side is missed; then only the slow "pushing without
+  moving" check (5 s) helps.
 - **Low obstacles and table tops.** The map only counts things between 5 cm
-  and 40 cm high (`Grid/MaxGroundHeight`, `Grid/MaxObstacleHeight`). Very low
-  objects are missed; the robot may drive under tables.
+  and 40 cm high (`Grid/MaxGroundHeight`, `Grid/MaxObstacleHeight`), and the
+  live stereo obstacles only things between 10 cm and 40 cm. Very low objects
+  are missed unless they are straight ahead (ToF); the robot may drive under
+  tables.
+- **Tight clearance.** Nav2 now keeps only about 2 cm between the robot's
+  widest part (the head) and a wall, plus the soft inflation cost. If the map
+  is a few centimetres off (drift), the robot can brush a door frame; the ToF
+  trigger and the stuck check then back it out.
 - **Plain walls and fast turns** still make visual odometry weak, which can
   bend or double walls in the map.
 - **Untested.** Nav2, explore_lite and the map saver were written against the
