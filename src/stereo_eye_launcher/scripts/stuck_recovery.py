@@ -6,12 +6,14 @@ Started by launch.py only when explore:=true.
 When is the robot "stuck"? Either of:
   1. Too close: the front time-of-flight (ToF) range sensor (tof_topic,
      default /front_tof, sensor_msgs/msg/LaserScan from a Gazebo gpu_lidar,
-     about 10 cm range) sees something. It covers the stereo blind zone right
-     in front of the robot. A reading counts if it is finite, >= range_min and
-     < tof_too_close_m. tof_too_close_m <= 0 (default) means "use the scan's
-     own range_max", i.e. anything the sensor sees at all is too close.
-     "No echo" readings (inf, or exactly range_max) never count. The recovery
-     starts at once, no waiting.
+     0.30 m range) measures something closer than tof_too_close_m (default
+     0.15 m). It covers the stereo blind zone right in front of the robot.
+     A reading counts if it is finite, >= range_min and < tof_too_close_m;
+     tof_too_close_m <= 0 means "use the scan's range_max" instead. "No echo"
+     readings (inf) never count. The recovery starts at once, no waiting.
+     Between 0.15 and 0.30 m the ToF sensor only feeds Nav2's local costmap
+     (nav2_params.yaml), which steers the robot away; this node fires only
+     when that was not enough.
   2. Pushing without moving: the speed command that reaches the robot
      (/cmd_vel, after Nav2's velocity smoother) has been faster than
      min_cmd_speed (0.05 m/s) for stuck_time (2 s), but the VISUAL odometry
@@ -89,7 +91,7 @@ class StuckRecovery(Node):
         self.cmd_vel_topic = p('cmd_vel_topic', '/cmd_vel').value
         self.odom_topic = p('odom_topic', '/odom').value
         self.tof_topic = p('tof_topic', '/front_tof').value
-        self.tof_too_close_m = p('tof_too_close_m', 0.0).value      # m; <= 0: use range_max
+        self.tof_too_close_m = p('tof_too_close_m', 0.15).value     # m; <= 0: use range_max
         self.map_frame = p('map_frame', 'map').value
         self.base_frame = p('base_frame', 'base_footprint').value
         self.nav_action = p('navigate_action', 'navigate_to_pose').value

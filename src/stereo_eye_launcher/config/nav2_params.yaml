@@ -154,29 +154,51 @@ local_costmap:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_topic: /map
         map_subscribe_transient_local: True   # rtabmap latches /map
-      # Live stereo obstacles. Two sources read the same cloud:
+      # Live obstacle sources. Two read the same stereo cloud, one is the ToF:
       #   stereo_mark  marks obstacles: only points 5-40 cm above the floor
       #                (the floor itself and table tops are ignored).
       #   stereo_clear clears free space: it also uses floor points (-10 cm to
       #                40 cm), so rays to the visible floor erase old marks in
       #                front of the robot. With marking points alone, empty
       #                floor would never clear stale obstacles.
-      # The front ToF sensor (/front_tof, ~10 cm range) is deliberately NOT a
-      # source here: its hits are at most ~0.2 m from the robot centre, inside
-      # the padded footprint (radius 0.25 m). footprint_clearing_enabled
-      # erases every mark under that footprint at once, and turning footprint
-      # clearing off would leave the robot "in collision" with itself. Also,
-      # with inf_is_valid a no-echo reading (inf) becomes a point at range_max,
-      # which a 10 cm sensor cannot tell apart from a real hit. The ToF sensor
-      # is used by stuck_recovery.py instead (back up and pick another
-      # frontier).
+      #   front_tof    the front time-of-flight range sensor (LaserScan,
+      #                0.30 m range), which sees right inside the stereo blind
+      #                zone. It marks and clears, so the robot steers away from
+      #                anything 0.15-0.30 m in front of it; below 0.15 m
+      #                stuck_recovery.py backs up instead (tof_too_close_m).
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
         footprint_clearing_enabled: True  # never mark the robot's own cell
         max_obstacle_height: 0.45   # (m) layer-wide cut-off (above the sources' limits)
         combination_method: 1       # 1 = keep the highest cost of all layers
-        observation_sources: stereo_mark stereo_clear
+        observation_sources: stereo_mark stereo_clear front_tof
+        front_tof:
+          topic: /front_tof
+          data_type: "LaserScan"
+          marking: True
+          clearing: True
+          # A "no echo" reading is inf. inf_is_valid is False, so those are
+          # simply dropped. (With True, Nav2 turns inf into a point at
+          # range_max - 0.1 mm. The marking range check works in whole 5 cm
+          # cells, so such a point could not be kept apart from a real hit at
+          # 0.30 m and would show up as a phantom obstacle in front of the
+          # robot.) Old ToF marks are still cleared: by rays to new ToF hits,
+          # and by the stereo_clear rays that pass over these cells to floor
+          # points further away.
+          inf_is_valid: False
+          obstacle_max_range: 0.30    # (m) = sensor range
+          obstacle_min_range: 0.0
+          raytrace_max_range: 0.35    # (m) clear along the whole beam
+          raytrace_min_range: 0.0
+          min_obstacle_height: 0.0    # (m) the beam is low; keep every hit
+          max_obstacle_height: 0.40
+          observation_persistence: 0.0
+          expected_update_rate: 0.0
+          # With the sensor about 0.10 m ahead of the robot centre, hits closer
+          # than ~0.15 m lie inside the padded footprint (radius 0.25 m) and
+          # are erased by footprint clearing; that range is stuck_recovery.py's
+          # job (tof_too_close_m 0.15).
         stereo_mark:
           topic: /stereo/obstacle_cloud
           data_type: "PointCloud2"

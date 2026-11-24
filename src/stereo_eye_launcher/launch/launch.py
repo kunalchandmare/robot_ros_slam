@@ -252,9 +252,10 @@ def generate_launch_description():
             '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
             '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
             # Front time-of-flight range sensor (gpu_lidar in
-            # stereo_eye.gazebo.xacro, MechaX), about 10 cm range, covering
-            # the stereo blind zone. Read by stuck_recovery.py. Harmless if
-            # the sensor is not in the model yet (no messages).
+            # stereo_eye.gazebo.xacro, MechaX), 0.30 m range, covering the
+            # stereo blind zone. Read by the local costmap (obstacles 0.15 to
+            # 0.30 m away) and stuck_recovery.py (closer than 0.15 m).
+            # Harmless if the sensor is not in the model yet (no messages).
             '/front_tof@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
         ],
         remappings=[
@@ -627,7 +628,7 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': use_sim_time,
             'tof_topic': '/front_tof',
-            'tof_too_close_m': 0.0,      # <= 0: anything within the sensor's range_max
+            'tof_too_close_m': 0.15,     # (m) recovery below this; costmap handles 0.15-0.30 m
         }],
         condition=IfCondition(explore),
     )
