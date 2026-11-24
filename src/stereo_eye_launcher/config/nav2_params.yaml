@@ -33,10 +33,18 @@ bt_navigator:
     transform_tolerance: 0.5        # (s) visual odometry TF can lag a little behind the clock
     bt_loop_duration: 10            # (ms) behaviour-tree tick period
     default_server_timeout: 20      # (ms) wait for action servers per tick
-    # default_nav_to_pose_bt_xml is left at Nav2's default:
-    # navigate_to_pose_w_replanning_and_recovery.xml (replan at 1 Hz; on
-    # failure clear costmaps, spin, wait, back up). It uses planner id
-    # "GridBased" and controller id "FollowPath" defined below.
+    # Behaviour tree for navigate_to_pose goals: Nav2's default tree (replan
+    # at 1 Hz; on failure clear costmaps, spin, wait, back up) plus a check
+    # that rejects goals the robot is already standing on, see
+    # behavior_trees/explore_navigate_to_pose.xml. launch.py replaces this
+    # placeholder with the installed path of that file (a YAML file cannot
+    # look up package paths itself). It uses planner id "GridBased" and
+    # controller id "FollowPath" defined below.
+    default_nav_to_pose_bt_xml: "replaced_by_launch_py"
+    # Used by that check (the GoalReached node): goals closer than this to the
+    # robot are aborted, so explore_lite blacklists them. Must be larger than
+    # general_goal_checker.xy_goal_tolerance (0.25 m).
+    goal_reached_tol: 0.35          # (m)
     # plugin_lib_names is left unset so Humble's built-in default list is used.
 
 # Helper nodes bt_navigator creates internally (they only need the sim clock).
@@ -74,7 +82,7 @@ controller_server:
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
       stateful: True
-      xy_goal_tolerance: 0.25       # (m)
+      xy_goal_tolerance: 0.25       # (m) keep below bt_navigator.goal_reached_tol
       yaw_goal_tolerance: 3.14      # (rad) = ignore final heading
 
     # Regulated Pure Pursuit: simple, smooth path follower for slow diff

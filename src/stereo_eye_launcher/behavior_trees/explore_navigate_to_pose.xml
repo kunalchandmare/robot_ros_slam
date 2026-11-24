@@ -1,0 +1,70 @@
+<!--
+  explore_navigate_to_pose.xml - Nav2 behaviour tree for frontier exploration.
+
+  Used by bt_navigator for every navigate_to_pose goal when explore:=true
+  (launch.py puts this file's installed path into nav2_params.yaml's
+  default_nav_to_pose_bt_xml).
+
+  It is Nav2 Humble's default tree (navigate_to_pose_w_replanning_and_recovery.xml,
+  copied unchanged from nav2_bt_navigator 1.1.20) with ONE check added in front:
+
+    RejectGoalsAlreadyReached: if the goal is already within goal_reached_tol
+    (0.35 m, set in nav2_params.yaml) of the robot when the goal arrives, the
+    tree FAILS straight away, so the goal ends as ABORTED instead of
+    SUCCEEDED.
+
+  Why: explore_lite drives to the centre of a frontier. Sometimes that centre
+  is right next to the robot, but in a spot the cameras cannot see (beside a
+  wall, under the robot). The goal was then "reached" instantly (inside
+  xy_goal_tolerance 0.25 m), the frontier never got smaller, and explore_lite
+  sent the same goal again every ~0.25 s, forever: a success also resets its
+  progress_timeout, so it never gave up. explore_lite on Humble puts every
+  ABORTED goal on its blacklist, so with this check it gives up on such a
+  frontier after one try and picks another one.
+
+  goal_reached_tol (0.35 m) must stay larger than the goal checker's
+  xy_goal_tolerance (0.25 m), so every goal that would succeed instantly is
+  caught here.
+
+  The check runs only once per goal: a Sequence remembers which child is
+  running, so GoalReached is not re-checked while the robot drives (otherwise
+  arriving at the goal would turn into a failure). If the robot pose is not
+  available yet, GoalReached returns FAILURE, the Inverter turns that into
+  SUCCESS, and the goal is navigated normally.
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="RejectGoalsAlreadyReached">
+      <Inverter>
+        <GoalReached goal="{goal}" global_frame="map" robot_base_frame="base_footprint"/>
+      </Inverter>
+      <!-- From here on: Nav2 Humble default tree, unchanged. -->
+      <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+        <PipelineSequence name="NavigateWithReplanning">
+          <RateController hz="1.0">
+            <RecoveryNode number_of_retries="1" name="ComputePathToPose">
+              <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+              <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+            </RecoveryNode>
+          </RateController>
+          <RecoveryNode number_of_retries="1" name="FollowPath">
+            <FollowPath path="{path}" controller_id="FollowPath"/>
+            <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+          </RecoveryNode>
+        </PipelineSequence>
+        <ReactiveFallback name="RecoveryFallback">
+          <GoalUpdated/>
+          <RoundRobin name="RecoveryActions">
+            <Sequence name="ClearingActions">
+              <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
+              <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
+            </Sequence>
+            <Spin spin_dist="1.57"/>
+            <Wait wait_duration="5"/>
+            <BackUp backup_dist="0.30" backup_speed="0.05"/>
+          </RoundRobin>
+        </ReactiveFallback>
+      </RecoveryNode>
+    </Sequence>
+  </BehaviorTree>
+</root>

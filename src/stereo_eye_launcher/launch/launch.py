@@ -25,6 +25,13 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
+# RewrittenYaml (from Nav2) is only needed for explore:=true. Import it softly
+# so the normal launch still works on a machine without Nav2.
+try:
+    from nav2_common.launch import RewrittenYaml
+except ImportError:
+    RewrittenYaml = None
+
 
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -63,6 +70,11 @@ def generate_launch_description():
         FindPackageShare('stereo_eye_launcher'),
         'config',
         'nav2_params.yaml',
+    ])
+    explore_bt_xml = PathJoinSubstitution([
+        FindPackageShare('stereo_eye_launcher'),
+        'behavior_trees',
+        'explore_navigate_to_pose.xml',
     ])
     explore_params = PathJoinSubstitution([
         FindPackageShare('stereo_eye_launcher'),
@@ -498,11 +510,25 @@ def generate_launch_description():
     # are inside navigation_launch.py), and ros_gz_bridge forwards /cmd_vel to
     # the Gazebo DiffDrive. Recovery behaviours (spin, back up) publish
     # /cmd_vel directly.
+    #
+    # The behaviour tree path cannot be written into nav2_params.yaml (it
+    # depends on where the package is installed), so RewrittenYaml fills in
+    # default_nav_to_pose_bt_xml with the installed
+    # behavior_trees/explore_navigate_to_pose.xml (a temporary copy of the
+    # params file is passed to Nav2).
+    if RewrittenYaml is not None:
+        nav2_params_file = RewrittenYaml(
+            source_file=nav2_params,
+            param_rewrites={'default_nav_to_pose_bt_xml': explore_bt_xml},
+            convert_types=True,
+        )
+    else:
+        nav2_params_file = nav2_params  # Nav2 missing: explore:=true cannot run anyway
     nav2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(nav2_navigation_launch),
         launch_arguments={
             'use_sim_time': use_sim_time,
-            'params_file': nav2_params,
+            'params_file': nav2_params_file,
             'autostart': 'true',
         }.items(),
         condition=IfCondition(explore),
