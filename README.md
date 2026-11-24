@@ -109,3 +109,19 @@ The [architecture document](documents/stereo_architecture.md) explains the node
 graph and how to tune planning and navigation.
 
 See [documents/ROS_Build_Guide.md](documents/ROS_Build_Guide.md) for the repository's package/build overview and [documents/ROS_Setup_Cariad.md](documents/ROS_Setup_Cariad.md) for the ROS 2 Humble development environment setup.
+
+## Demo
+Following video captured with 4x (original took 12 min for shown map) Speed and robot is moving autonomously with some limitation as get stuck sometimes deciding on which direction to move and currently not perfect navigating but creates 2D map as shown using RTAB SLAM
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="documents/images/gz_02.png" width="100%">
+      <br><b>Apartment World Gazebo</b>
+    </td>
+    <td width="50%">
+      <video src="documents/videos/rviz_02.mp4" controls width="100%"></video>
+      <br><b>Stereo Eye SLAM Rviz</b>
+    </td>
+  </tr>
+</table>
