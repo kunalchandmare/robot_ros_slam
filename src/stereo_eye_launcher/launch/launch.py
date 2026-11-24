@@ -562,6 +562,51 @@ def generate_launch_description():
         condition=IfCondition(explore),
     )
 
+    # Live obstacle cloud for Nav2's obstacle layers (explore:=true only).
+    # rtabmap_util's point_cloud_xyzrgb takes the raw stereo pair, computes a
+    # disparity image with OpenCV block matching (rtabmap's StereoBM
+    # parameters) and publishes a point cloud in the left camera's optical
+    # frame on /stereo/obstacle_cloud. No extra package is needed (rtabmap_util
+    # is part of ros-humble-rtabmap-ros) and no separate disparity node.
+    #   decimation 4        use every 4th pixel in x and y for the cloud
+    #                       (16x fewer points; the disparity itself is still
+    #                       computed at full 640x360 for accuracy)
+    #   max_depth 3.0       drop points further than 3 m (too noisy)
+    #   voxel_size 0.05     one point per 5 cm cube (= costmap cell size)
+    #   noise_filter_radius 0.1 / min_neighbors 5: drop lonely points (stereo
+    #                       speckles) that would show up as fake obstacles
+    #   StereoBM/NumDisparities 128 (rtabmap's default, set explicitly): the
+    #                       closest depth it can measure is
+    #                       343.5 * 0.08 / 128 = 0.21 m. Plain walls fail
+    #                       earlier, at about 0.35 m: that is the blind zone.
+    # It runs at the camera rate (24 Hz) because the node has no rate limit;
+    # block matching at 640x360 is cheap compared with visual odometry.
+    stereo_obstacle_cloud = Node(
+        package='rtabmap_util',
+        executable='point_cloud_xyzrgb',
+        name='stereo_obstacle_cloud',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'approx_sync': True,
+            'approx_sync_max_interval': 0.02,
+            'decimation': 4,
+            'max_depth': 3.0,
+            'voxel_size': 0.05,
+            'noise_filter_radius': 0.1,
+            'noise_filter_min_neighbors': 5,
+            'StereoBM/NumDisparities': '128',
+        }],
+        remappings=[
+            ('left/image', '/stereo/left/image_raw'),
+            ('left/camera_info', '/stereo/left/camera_info'),
+            ('right/image', '/stereo/right/image_raw'),
+            ('right/camera_info', '/stereo/right/camera_info'),
+            ('cloud', '/stereo/obstacle_cloud'),
+        ],
+        condition=IfCondition(explore),
+    )
+
     # Saves /map with nav2_map_server's map_saver_cli as soon as explore_lite
     # publishes "exploration_complete" on /explore/status.
     map_saver = Node(
@@ -592,6 +637,7 @@ def generate_launch_description():
         steering,
         teleop,
         nav2,
+        stereo_obstacle_cloud,
         explore_lite,
         map_saver,
     ])

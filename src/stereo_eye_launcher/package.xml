@@ -34,6 +34,7 @@
   <exec_depend>rtabmap_odom</exec_depend>
   <exec_depend>rqt_robot_steering</exec_depend>
   <exec_depend>rtabmap_slam</exec_depend>
+  <exec_depend>rtabmap_util</exec_depend>
   <exec_depend>rviz2</exec_depend>
   <exec_depend>stereo_eye</exec_depend>
   <exec_depend>teleop_twist_keyboard</exec_depend>

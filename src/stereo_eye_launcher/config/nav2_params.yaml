@@ -6,8 +6,9 @@
 # every one of them has a section here (navigation_launch.py only rewrites
 # use_sim_time for nodes that are listed).
 #
-# Robot: small differential drive, round footprint (radius ~0.15 m), driven
+# Robot: small differential drive, round footprint (real radius ~0.15 m), driven
 # slowly (0.15 m/s, 0.4 rad/s) so stereo visual odometry keeps tracking.
+# The costmaps use robot_radius 0.25 m = 0.15 m body + 0.10 m safety margin.
 #
 # Localization: NONE in Nav2 (no AMCL, no map_server). RTAB-Map provides the
 # whole chain instead:
@@ -17,10 +18,21 @@
 #
 # Map: rtabmap's 2D occupancy grid on /map (latched = transient local QoS).
 #
-# No laser or depth obstacle layer: obstacles are only what rtabmap has already
-# drawn into /map (it updates about once per second and whenever the robot has
-# moved RGBD/LinearUpdate). Something new right in front of the cameras shows
-# up in the costmaps only after rtabmap's next map update.
+# Live obstacles: an obstacle layer in both costmaps, fed by
+# /stereo/obstacle_cloud (rtabmap_util point_cloud_xyzrgb computing a point
+# cloud from the stereo pair, started by launch.py with explore:=true). It
+# marks walls as soon as the cameras see them, instead of waiting for
+# rtabmap's next /map update (about once per second, and only after the robot
+# moved).
+#
+# Stereo blind zone: stereo depth needs the same spot in both images. With the
+# 0.08 m baseline and 128 disparities the closest measurable depth is
+# fx * baseline / 128 = 343.5 * 0.08 / 128 ~= 0.21 m, and on plain, low-texture
+# walls block matching fails earlier, so in practice anything closer than
+# about 0.35 m in front of the cameras is invisible. The layer therefore keeps
+# obstacles it saw from further away (observation_persistence 0 = keep until a
+# ray clears them), and the 0.10 m footprint margin plus RPP's collision check
+# make the robot stop before it gets that close.
 #
 # Only non-default or important settings are listed; Nav2 fills in the rest.
 
@@ -99,7 +111,10 @@ controller_server:
       min_approach_linear_velocity: 0.05    # (m/s) slow-down floor near the goal
       approach_velocity_scaling_dist: 0.4   # (m) start slowing this far from the goal
       use_regulated_linear_velocity_scaling: True   # slow down on tight curves
-      use_cost_regulated_linear_velocity_scaling: False
+      use_cost_regulated_linear_velocity_scaling: True  # also slow down close to obstacles
+      cost_scaling_dist: 0.4                # (m) start slowing this close to an obstacle
+      cost_scaling_gain: 1.0
+      inflation_cost_scaling_factor: 4.0    # must equal inflation_layer.cost_scaling_factor
       regulated_linear_scaling_min_radius: 0.9      # (m) curves tighter than this slow down
       regulated_linear_scaling_min_speed: 0.05      # (m/s) never slower than this (default 0.25 > our max)
       use_rotate_to_heading: True           # turn in place when the path points away
@@ -107,8 +122,15 @@ controller_server:
       rotate_to_heading_min_angle: 0.785    # (rad) 45 deg: rotate in place above this
       max_angular_accel: 1.5                # (rad/s^2) matches the DiffDrive limit
       allow_reversing: False                # must be False with use_rotate_to_heading
-      use_collision_detection: True         # stop if the path ahead hits a lethal cell
-      max_allowed_time_to_collision_up_to_carrot: 1.5  # (s) look-ahead for that check
+      # Collision check on the local costmap (live stereo obstacles + /map):
+      # the robot's padded footprint (radius 0.25 m) is projected along the
+      # planned motion for up to 1.5 s (about 0.22 m at 0.15 m/s, or up to the
+      # carrot). If it would touch a lethal cell anywhere on the way, the
+      # controller stops and reports "collision ahead", so the robot halts
+      # with its real body roughly 0.1 to 0.3 m in front of a wall, and the
+      # behaviour tree's recoveries / explore_lite take over.
+      use_collision_detection: True
+      max_allowed_time_to_collision_up_to_carrot: 1.5  # (s)
       max_robot_pose_search_dist: 10.0      # (m) how far along the path to find the robot
 
 local_costmap:
@@ -121,21 +143,58 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05              # (m) same as rtabmap Grid/CellSize
-      robot_radius: 0.15            # (m) round footprint
+      robot_radius: 0.25            # (m) 0.15 m body + 0.10 m safety margin
       update_frequency: 5.0         # (Hz)
       publish_frequency: 2.0        # (Hz) for RViz / behaviours
       transform_tolerance: 0.5      # (s)
-      # No live sensor layer (no laser; stereo depth goes into rtabmap's grid
-      # instead), so the local costmap is rtabmap's /map cut to a window,
-      # plus inflation.
-      plugins: ["static_layer", "inflation_layer"]
+      # Layers, applied in this order: rtabmap's /map cut to the window, live
+      # stereo obstacles on top, then inflation around both.
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_topic: /map
         map_subscribe_transient_local: True   # rtabmap latches /map
+      # Live stereo obstacles. Two sources read the same cloud:
+      #   stereo_mark  marks obstacles: only points 5-40 cm above the floor
+      #                (the floor itself and table tops are ignored).
+      #   stereo_clear clears free space: it also uses floor points (-10 cm to
+      #                40 cm), so rays to the visible floor erase old marks in
+      #                front of the robot. With marking points alone, empty
+      #                floor would never clear stale obstacles.
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        footprint_clearing_enabled: True  # never mark the robot's own cell
+        max_obstacle_height: 0.45   # (m) layer-wide cut-off (above the sources' limits)
+        combination_method: 1       # 1 = keep the highest cost of all layers
+        observation_sources: stereo_mark stereo_clear
+        stereo_mark:
+          topic: /stereo/obstacle_cloud
+          data_type: "PointCloud2"
+          marking: True
+          clearing: False
+          min_obstacle_height: 0.05   # (m) above this is an obstacle (floor is below)
+          max_obstacle_height: 0.40   # (m) the robot fits under anything higher
+          obstacle_max_range: 2.5     # (m) stereo depth is too noisy further away
+          obstacle_min_range: 0.0
+          observation_persistence: 0.0  # 0 = use the latest cloud only
+          expected_update_rate: 0.0     # 0 = do not warn about the rate
+          inf_is_valid: False
+        stereo_clear:
+          topic: /stereo/obstacle_cloud
+          data_type: "PointCloud2"
+          marking: False
+          clearing: True
+          min_obstacle_height: -0.10  # (m) include floor points as ray end points
+          max_obstacle_height: 0.40
+          raytrace_max_range: 3.0     # (m) clear along rays up to 3 m (= cloud max_depth)
+          raytrace_min_range: 0.0
+          observation_persistence: 0.0
+          expected_update_rate: 0.0
+          inf_is_valid: False
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.35      # (m) cost spreads this far from walls
+        inflation_radius: 0.45      # (m) cost spreads this far from obstacles
         cost_scaling_factor: 4.0    # higher = cost drops faster away from walls
 
 global_costmap:
@@ -144,7 +203,7 @@ global_costmap:
       use_sim_time: True
       global_frame: map
       robot_base_frame: base_footprint
-      robot_radius: 0.15
+      robot_radius: 0.25            # (m) 0.15 m body + 0.10 m safety margin
       resolution: 0.05
       update_frequency: 1.0         # (Hz) rtabmap's map changes about once per second
       publish_frequency: 1.0        # (Hz) explore_lite reads this costmap
@@ -153,14 +212,50 @@ global_costmap:
       always_send_full_costmap: True  # publish the whole costmap every time (explore_lite
                                       # subscribes late and needs full maps, not updates)
       # The size follows rtabmap's /map, which grows as the robot explores.
-      plugins: ["static_layer", "inflation_layer"]
+      # The same live stereo obstacle layer as the local costmap, so the
+      # planner routes around obstacles rtabmap has not mapped yet. Its clearing
+      # only lowers its own layer, so it never turns unknown /map cells into
+      # free space (frontiers stay correct).
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_topic: /map
         map_subscribe_transient_local: True
+      # Same two sources as in the local costmap (see the comments there).
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        footprint_clearing_enabled: True  # never mark the robot's own cell
+        max_obstacle_height: 0.45   # (m) layer-wide cut-off (above the sources' limits)
+        combination_method: 1       # 1 = keep the highest cost of all layers
+        observation_sources: stereo_mark stereo_clear
+        stereo_mark:
+          topic: /stereo/obstacle_cloud
+          data_type: "PointCloud2"
+          marking: True
+          clearing: False
+          min_obstacle_height: 0.05   # (m) above this is an obstacle (floor is below)
+          max_obstacle_height: 0.40   # (m) the robot fits under anything higher
+          obstacle_max_range: 2.5     # (m) stereo depth is too noisy further away
+          obstacle_min_range: 0.0
+          observation_persistence: 0.0  # 0 = use the latest cloud only
+          expected_update_rate: 0.0     # 0 = do not warn about the rate
+          inf_is_valid: False
+        stereo_clear:
+          topic: /stereo/obstacle_cloud
+          data_type: "PointCloud2"
+          marking: False
+          clearing: True
+          min_obstacle_height: -0.10  # (m) include floor points as ray end points
+          max_obstacle_height: 0.40
+          raytrace_max_range: 3.0     # (m) clear along rays up to 3 m (= cloud max_depth)
+          raytrace_min_range: 0.0
+          observation_persistence: 0.0
+          expected_update_rate: 0.0
+          inf_is_valid: False
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.35
+        inflation_radius: 0.45
         cost_scaling_factor: 4.0
 
 planner_server:

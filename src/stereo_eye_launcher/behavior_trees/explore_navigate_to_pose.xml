@@ -6,7 +6,9 @@
   default_nav_to_pose_bt_xml).
 
   It is Nav2 Humble's default tree (navigate_to_pose_w_replanning_and_recovery.xml,
-  copied unchanged from nav2_bt_navigator 1.1.20) with ONE check added in front:
+  copied from nav2_bt_navigator 1.1.20) with two changes:
+
+  1. A check added in front:
 
     RejectGoalsAlreadyReached: if the goal is already within goal_reached_tol
     (0.35 m, set in nav2_params.yaml) of the robot when the goal arrives, the
@@ -26,7 +28,17 @@
   xy_goal_tolerance (0.25 m), so every goal that would succeed instantly is
   caught here.
 
-  The check runs only once per goal: a Sequence remembers which child is
+  2. The local costmap is no longer cleared entirely during recoveries. The
+     two "ClearLocalCostmap" steps use ClearCostmapExceptRegion with
+     reset_distance 1.5: obstacles in a 1.5 x 1.5 m square around the robot are
+     KEPT, everything further away is cleared. Reason: stereo cannot see a
+     wall closer than about 0.35 m (blind zone). If a recovery wiped the whole
+     local costmap while the robot stands near a wall, the wall would be gone
+     from the costmap and could not be seen again, and the robot would drive
+     into it. The global costmap is still cleared entirely (rtabmap's /map
+     stays in it).
+
+  The check in (1) runs only once per goal: a Sequence remembers which child is
   running, so GoalReached is not re-checked while the robot drives (otherwise
   arriving at the goal would turn into a failure). If the robot pose is not
   available yet, GoalReached returns FAILURE, the Inverter turns that into
@@ -38,7 +50,7 @@
       <Inverter>
         <GoalReached goal="{goal}" global_frame="map" robot_base_frame="base_footprint"/>
       </Inverter>
-      <!-- From here on: Nav2 Humble default tree, unchanged. -->
+      <!-- From here on: Nav2 Humble default tree; only the two local clears differ. -->
       <RecoveryNode number_of_retries="6" name="NavigateRecovery">
         <PipelineSequence name="NavigateWithReplanning">
           <RateController hz="1.0">
@@ -49,14 +61,14 @@
           </RateController>
           <RecoveryNode number_of_retries="1" name="FollowPath">
             <FollowPath path="{path}" controller_id="FollowPath"/>
-            <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearCostmapExceptRegion name="ClearLocalCostmap-Context" service_name="local_costmap/clear_except_local_costmap" reset_distance="1.5"/>
           </RecoveryNode>
         </PipelineSequence>
         <ReactiveFallback name="RecoveryFallback">
           <GoalUpdated/>
           <RoundRobin name="RecoveryActions">
             <Sequence name="ClearingActions">
-              <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
+              <ClearCostmapExceptRegion name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_except_local_costmap" reset_distance="1.5"/>
               <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
             </Sequence>
             <Spin spin_dist="1.57"/>
