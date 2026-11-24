@@ -94,6 +94,7 @@ Or use the run script, which sources the workspace and launches in one go
 | `render_engine`| `ogre`                                          | Gazebo render engine, `ogre` or `ogre2`  |
 | `gz_gui`       | `true`                                          | Open the Gazebo window; `false` = server only (sensors still render, RViz still works) |
 | `explore`      | `false`                                         | Explore by itself (Nav2 + explore_lite) and save the map; turns off `steering` and `teleop` |
+| `explorer`     | `explore_lite`                                  | Who picks the frontiers with `explore:=true`: `explore_lite` (as before) or `own` (`frontier_explorer.py`, see "Our own explorer") |
 | `maps_dir`     | `/workspaces/ros2-dev/src/stereo_eye_launcher/maps` | Where `explore:=true` saves the map |
 | `map_name`     | `apartment`                                     | File name prefix of the saved map        |
 
@@ -1061,6 +1062,48 @@ exploration, publish `{data: false}` on the same topic.
 **It keeps going for a long time.** Small frontiers behind furniture or in
 noisy corners can keep it busy. Save the map by hand (above) whenever it looks
 good enough, then stop the launch.
+
+### Our own explorer (explorer:=own, opt-in)
+
+`scripts/frontier_explorer.py` can replace explore_lite. It is off by default
+(`explorer:=explore_lite`); try it with:
+
+```bash
+./src/stereo_eye_launcher/scripts/run_sim.sh explore:=true explorer:=own gz_gui:=false
+```
+
+It uses the same topics as explore_lite (`/explore/status`, `/explore/resume`,
+the `navigate_to_pose` action), so the map saver and `stuck_recovery.py` work
+the same way. What it does differently (lessons from the 2026-11-24 run, where
+explore_lite sent the robot to "frontiers" outside the building):
+
+1. **Only reachable frontiers.** A gap counts as a way through only if it is
+   at least 0.36 m wide (robot + 5 cm per side). A frontier must be visible
+   from where the robot can drive, never behind a wall.
+2. **Ranked by path length**, not straight-line distance, minus a bonus for
+   long frontiers.
+3. **The goal is a free cell near the frontier**, at least ~0.27 m from walls,
+   never the frontier's centre (which can be inside a wall).
+4. **Failed areas are blacklisted** (0.5 m around the goal) for 60 s, 120 s,
+   then for good.
+5. **Looks around first** (one turn on the spot) until 10 m2 of map is known.
+6. **Sticks to its goal** until it is reached, fails, makes no progress for
+   30 s, or another frontier is clearly better.
+7. **Escape:** two failed goals in a row without moving: it asks
+   `stuck_recovery.py` to back up 0.15 m and turn ~45 deg (`[ESCAPE]` in the
+   log). Only `stuck_recovery.py` ever drives backwards.
+8. **Every decision is logged** with `[EXPLORER]`: which frontier, its size,
+   the path length, the score and why it was chosen, and why others were not.
+
+Settings: `config/frontier_explorer_params.yaml` (every value is explained
+there). Check the frontier choice without ROS, on a synthetic map or on a
+saved map:
+
+```bash
+python3 src/stereo_eye_launcher/test/test_frontier_selection.py
+python3 src/stereo_eye_launcher/test/test_frontier_selection.py \
+    --map src/stereo_eye_launcher/maps/<saved map>.yaml --robot 0 0
+```
 
 ### Limitations
 

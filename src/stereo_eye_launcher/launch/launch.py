@@ -81,6 +81,17 @@ def generate_launch_description():
         'config',
         'explore_params.yaml',
     ])
+    # explorer:=own -> our frontier_explorer.py instead of explore_lite
+    explorer = LaunchConfiguration('explorer')
+    frontier_explorer_params = PathJoinSubstitution([
+        FindPackageShare('stereo_eye_launcher'),
+        'config',
+        'frontier_explorer_params.yaml',
+    ])
+    explore_with_lite = PythonExpression(
+        ["'", explore, "'.lower() in ('true', '1') and '", explorer, "' == 'explore_lite'"])
+    explore_with_own = PythonExpression(
+        ["'", explore, "'.lower() in ('true', '1') and '", explorer, "' == 'own'"])
 
     # Living-room pose recommended by apartment_gazebo: clear of the sofa
     # (x=2.4,y=7.2, 2.2x0.85 m) and coffee table (x=2.4,y=6.0, 1.2x0.6 m),
@@ -157,6 +168,16 @@ def generate_launch_description():
             default_value='false',
             description='Explore autonomously (Nav2 + explore_lite) and save the map if true; '
                         'turns off steering and teleop',
+        ),
+        # Which node picks the frontiers when explore:=true. explore_lite =
+        # as before (default). own = scripts/frontier_explorer.py (reachable
+        # frontiers only, see config/frontier_explorer_params.yaml).
+        DeclareLaunchArgument(
+            'explorer',
+            default_value='explore_lite',
+            choices=['explore_lite', 'own'],
+            description='Frontier explorer for explore:=true: explore_lite (default) or own '
+                        '(frontier_explorer.py)',
         ),
         # Maps are written to the package source folder, not to install/,
         # so they survive a rebuild and are easy to find.
@@ -607,7 +628,19 @@ def generate_launch_description():
         name='explore_node',
         output='screen',
         parameters=[explore_params, {'use_sim_time': use_sim_time}],
-        condition=IfCondition(explore),
+        condition=IfCondition(explore_with_lite),
+    )
+
+    # Our own frontier explorer (explore:=true explorer:=own): same topics and
+    # Nav2 action as explore_lite, so stuck_recovery.py and
+    # explore_map_saver.py work unchanged. See scripts/frontier_explorer.py.
+    frontier_explorer = Node(
+        package='stereo_eye_launcher',
+        executable='frontier_explorer.py',
+        name='frontier_explorer',
+        output='screen',
+        parameters=[frontier_explorer_params, {'use_sim_time': use_sim_time}],
+        condition=IfCondition(explore_with_own),
     )
 
     # Live obstacle cloud for Nav2's obstacle layers (explore:=true only).
@@ -720,6 +753,7 @@ def generate_launch_description():
         nav2,
         stereo_obstacle_cloud,
         explore_lite,
+        frontier_explorer,
         stuck_recovery,
         map_saver,
     ])

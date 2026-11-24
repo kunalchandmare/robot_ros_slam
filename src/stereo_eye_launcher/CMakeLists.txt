@@ -13,6 +13,8 @@ install(DIRECTORY launch rviz config behavior_trees DESTINATION share/${PROJECT_
 install(PROGRAMS
   scripts/explore_map_saver.py   # saves the map when exploration is done
   scripts/stuck_recovery.py      # backs up and turns when the robot is stuck
+  scripts/frontier_explorer.py   # our own frontier explorer (explorer:=own)
+  scripts/frontier_core.py       # its frontier selection (NumPy), imported by it
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

@@ -75,6 +75,17 @@ does not loop at the same spot. ("[TOO CLOSE] (repeat 2 here) ...")
 Backing up is open-loop (speed x time) and the cameras cannot see behind the
 robot, so keep backup_distance small.
 
+4. [ESCAPE] (only used by frontier_explorer.py, explorer:=own): a request
+   on escape_topic (std_msgs/String, the text is the reason), sent when
+   several Nav2 goals in a row were aborted while the robot did not move
+   (the controller refuses to drive, e.g. "collision ahead" right next to
+   furniture). Handled like [NO PATH] without a goal swap (the explorer has
+   already blacklisted that area): pause exploration, back up
+   backup_distance, then turn escape_turn_angle on the spot towards the side
+   with the lower costmap value, and resume. Ignored while a recovery or its
+   cooldown is running. explore_lite never publishes it, so with
+   explorer:=explore_lite nothing changes.
+
 All thresholds are ROS parameters (see declare_parameter calls below).
 """
 
@@ -93,7 +104,7 @@ from geometry_msgs.msg import PoseStamped, Twist
 from nav2_msgs.action import NavigateToPose
 from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 
 from explore_lite_msgs.msg import ExploreStatus
 
@@ -102,6 +113,7 @@ IDLE = 'idle'
 PREEMPT = 'preempt'      # waiting for our goal to replace explore_lite's goal
 SETTLE = 'settle'        # explore paused, waiting for Nav2's last commands to stop
 MOVE = 'move'            # backing up (or, for [NO PATH], maybe driving forward)
+TURN = 'turn'            # [ESCAPE] only: turning on the spot after backing up
 COOLDOWN = 'cooldown'
 
 # nav2_costmap_2d publishes OccupancyGrid values 0-100: 99 = inscribed
@@ -146,6 +158,10 @@ class StuckRecovery(Node):
         self.repeat_window = p('repeat_window', 120.0).value        # s
         self.max_backup_distance = p('max_backup_distance', 0.3).value  # m
         self.max_cooldown = p('max_cooldown', 40.0).value           # s
+        # [ESCAPE] requests from frontier_explorer.py
+        self.escape_topic = p('escape_topic', '/stuck_recovery/escape').value
+        self.escape_turn_angle = p('escape_turn_angle', 0.8).value  # rad (~45 deg)
+        self.escape_turn_speed = p('escape_turn_speed', 0.4).value  # rad/s
 
         # State
         self.phase = IDLE
@@ -163,6 +179,9 @@ class StuckRecovery(Node):
         self.explore_status = None
         self.paused_explore = False
         self.events = deque()          # (Time, x, y) of earlier recoveries
+        self.escape_request = None     # (Time, reason) of the latest [ESCAPE] request
+        self.turn_pending = 0.0        # rad still to turn after the move ([ESCAPE])
+        self.turn_dir = 1.0
 
         self.cmd_pub = self.create_publisher(Twist, self.cmd_vel_topic, 10)
         self.resume_pub = self.create_publisher(Bool, '/explore/resume', 10)
@@ -173,6 +192,7 @@ class StuckRecovery(Node):
         self.create_subscription(ExploreStatus, '/explore/status', self.on_status, latched)
         self.create_subscription(LaserScan, self.tof_topic, self.on_tof, 10)
         self.create_subscription(OccupancyGrid, self.costmap_topic, self.on_costmap, latched)
+        self.create_subscription(String, self.escape_topic, self.on_escape, 10)
 
         self.nav_client = ActionClient(self, NavigateToPose, self.nav_action)
         self.tf_buffer = tf2_ros.Buffer()
@@ -225,6 +245,12 @@ class StuckRecovery(Node):
 
     def on_costmap(self, msg):
         self.costmap = msg
+
+    def on_escape(self, msg):
+        if self.phase != IDLE:
+            self.get_logger().info(f'[ESCAPE] Request ignored, a recovery is already running: {msg.data}')
+            return
+        self.escape_request = (self.now(), msg.data)
 
     # ---------- helpers ----------
 
@@ -313,6 +339,18 @@ class StuckRecovery(Node):
             self.inscribed_since = now
         return now - self.inscribed_since >= Duration(seconds=self.inscribed_time)
 
+    def turn_side(self, pose):
+        """+1 (left) or -1 (right): the side with the lower costmap value 0.3 m away."""
+        if pose is None:
+            return 1.0
+        yaw = self.yaw_of(pose)
+        x, y = pose.pose.position.x, pose.pose.position.y
+        left = self.cost_at(x - 0.3 * math.sin(yaw), y + 0.3 * math.cos(yaw))
+        right = self.cost_at(x + 0.3 * math.sin(yaw), y - 0.3 * math.cos(yaw))
+        left = 100 if left is None else left
+        right = 100 if right is None else right
+        return -1.0 if right < left else 1.0
+
     def escape_sign(self, pose):
         """+1 (forward) if the costmap is lower ahead than behind, else -1 (back)."""
         yaw = self.yaw_of(pose)
@@ -335,6 +373,7 @@ class StuckRecovery(Node):
                 self.cmd_since = None
                 self.too_close = None
                 self.inscribed_since = None
+                self.escape_request = None
                 return
             pose = self.robot_pose()
             too_close = (self.too_close is not None and self.recent(self.too_close[0], now)
@@ -354,6 +393,17 @@ class StuckRecovery(Node):
                     pose, '[NO PATH]',
                     'Robot stands too close to a wall for Nav2 to plan from here',
                     blacklist=False, sign=sign)
+            elif self.escape_request is not None:
+                reason = self.escape_request[1]
+                self.escape_request = None
+                self.turn_dir = self.turn_side(pose)
+                self.start_recovery(pose, '[ESCAPE]', f'Explorer asks for help ({reason})',
+                                    blacklist=False, sign=-1.0)
+                self.turn_pending = abs(self.escape_turn_angle)
+                if self.turn_pending:
+                    side = 'left' if self.turn_dir > 0 else 'right'
+                    self.get_logger().warn(
+                        f'[ESCAPE] After backing up: turning {math.degrees(self.turn_pending):.0f} deg {side}.')
         elif self.phase == PREEMPT:
             self.publish_cmd()  # keep the robot stopped while Nav2 lets go
             if now >= self.phase_end:
@@ -365,6 +415,16 @@ class StuckRecovery(Node):
             self.publish_cmd()  # zeros only, until the move starts
             if now >= self.phase_end:
                 self.enter(MOVE, self.move_distance / max(self.backup_speed, 1e-3))
+        elif self.phase == MOVE and now >= self.phase_end and self.turn_pending:
+            self.publish_cmd()  # stop, then turn ([ESCAPE] only)
+            self.enter(TURN, self.turn_pending / max(abs(self.escape_turn_speed), 1e-3))
+            self.turn_pending = 0.0
+        elif self.phase == TURN:
+            if now >= self.phase_end:
+                self.publish_cmd()
+                self.enter(MOVE, 0.0)  # finish like every other recovery (resume, cooldown)
+            else:
+                self.publish_cmd(angular=self.turn_dir * abs(self.escape_turn_speed))
         elif self.phase == MOVE:
             if now >= self.phase_end:
                 self.publish_cmd()  # stop
