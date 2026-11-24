@@ -28,7 +28,7 @@ stereo_eye_launcher/
 ├── rviz/
 │   └── stereo_slam.rviz
 └── scripts/
-    ├── run_sim.sh            # source the workspace and launch, in one command
+    ├── run_sim.sh            # source the workspace and launch; also saves logs/latest.log
     ├── explore_map_saver.py  # saves the map when exploration is done
     └── stuck_recovery.py     # backs up when the robot is stuck
 ```
@@ -477,13 +477,31 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -p speed:=0.15 -
 ## Where the output goes
 
 Everything the launch prints (Gazebo, rtabmap, Nav2, explore_lite, the map
-saver) shows up in the terminal where you started it; no log files are written
-by this package. Launch arguments pass straight through `run_sim.sh`, for
-example `./src/stereo_eye_launcher/scripts/run_sim.sh rviz:=false steering:=false`.
+saver) shows up in the terminal where you started it, with colours, as
+before. When you start it with `run_sim.sh`, the same text is **also saved**
+as plain text (without colour codes) to
 
-To keep a copy for asking for help, scroll up in the terminal and copy the
-text, or select all and copy (in most Linux terminals: Edit > Select All, then
-Ctrl+Shift+C).
+```
+<repo>/logs/latest.log      this run, overwritten every time you start
+<repo>/logs/previous.log    the run before (moved there at start)
+```
+
+`<repo>` is the top folder of the git repository (in the container
+`/workspaces/ros2-dev`). Only these two files are ever written; the `logs/`
+folder is ignored by git. `run_sim.sh` prints `Saving this run's output to
+...` at the start and `Output saved to ...` at the end. Press Ctrl+C to stop
+as usual; the last lines of the shutdown still end up in the file.
+
+Launch arguments pass straight through `run_sim.sh`, for example
+`./src/stereo_eye_launcher/scripts/run_sim.sh rviz:=false steering:=false`.
+Started with plain `ros2 launch stereo_eye_launcher launch.py`, nothing is
+saved; then scroll up in the terminal and copy the text.
+
+To check the script after editing it (prints nothing if it is fine):
+
+```bash
+bash -n src/stereo_eye_launcher/scripts/run_sim.sh
+```
 
 ## Quick checks after launch
 
@@ -591,8 +609,9 @@ If the simulation is paused afterwards, press the play button in Gazebo.
 
 **Where do I see what went wrong?** Everything prints in the terminal where
 you started the launch. Scroll up to find the first red or yellow line (errors
-and warnings), or copy the whole terminal text and send it when asking for
-help. See [Where the output goes](#where-the-output-goes).
+and warnings). With `run_sim.sh` the whole output is also in
+`logs/latest.log` (the run before in `logs/previous.log`); send that file
+when asking for help. See [Where the output goes](#where-the-output-goes).
 
 ## Autonomous exploration (explore:=true)
 
@@ -942,11 +961,15 @@ messages appear and it backs up by itself. If not:
   [Troubleshooting](#troubleshooting)) and start again.
 
 **The robot still backs up again and again, or takes long to move on.**
-Please send the terminal lines that contain any of
+Please send `logs/latest.log`, or at least the lines that contain any of
 these words: `[STUCK]`, `[TOO CLOSE]`, `[NO PATH]`, `Running spin`,
 `Running backup`, `Failed to make progress`, `planner failed`,
 `Received goal preemption request`, `No frontiers found`,
-`All frontiers traversed`.
+`All frontiers traversed`. To pick them out:
+
+```bash
+grep -E "STUCK|TOO CLOSE|NO PATH|Running spin|Running backup|Failed to make progress|planner failed|preemption|frontiers" logs/latest.log
+```
 
 Also check the ToF sensor with the robot standing in open space:
 `ros2 topic echo /front_tof --field ranges` should print `inf` for all five
