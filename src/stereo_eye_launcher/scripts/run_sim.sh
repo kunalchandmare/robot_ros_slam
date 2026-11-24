@@ -17,6 +17,8 @@
 #      <repo>/logs/previous.log. Only these two files are ever written.
 #      Press Ctrl+C to stop.
 #   3. Exits with the exit code of "ros2 launch".
+#   Before 2., it applies our patches to third-party code (patches/) and
+#   rebuilds explore_lite when the patch is newer than its build (see below).
 
 set -eo pipefail
 
@@ -51,6 +53,30 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)
 if [ -z "$REPO_ROOT" ]; then
   REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 fi
+# --- Local patches to third-party code (patches/) ---------------------------
+# explore_lite (submodule src/third_party/m-explore-ros2) needs our patch
+# patches/m-explore-ros2/0001-frontier-search-through-inflated-cells.patch,
+# or exploration stops early at doorways ("No frontiers found"). Apply it if
+# it is not in yet (prints one line either way; stops here on an error), then
+# rebuild explore_lite if its installed program is older than the patched
+# source (only happens once after the patch is applied or changed).
+if ! bash "$REPO_ROOT/patches/apply_patches.sh"; then
+  echo "ERROR: could not apply patches/ (see above). Not starting the simulation." >&2
+  exit 1
+fi
+EXPLORE_SRC="$REPO_ROOT/src/third_party/m-explore-ros2/explore/src/frontier_search.cpp"
+EXPLORE_BIN="/workspaces/ros2-dev/install/explore_lite/lib/explore_lite/explore"
+if [ ! -e "$EXPLORE_BIN" ] || [ "$EXPLORE_SRC" -nt "$EXPLORE_BIN" ]; then
+  echo "explore_lite build is older than its patched source: rebuilding it (colcon build --packages-select explore_lite) ..."
+  if ! (cd /workspaces/ros2-dev && colcon build --packages-select explore_lite); then
+    echo "ERROR: colcon build of explore_lite failed (see above). Not starting the simulation." >&2
+    exit 1
+  fi
+  echo "explore_lite rebuilt with the patch."
+else
+  echo "explore_lite build is up to date with its patched source."
+fi
+
 LOG_DIR="$REPO_ROOT/logs"          # ignored by git (see the repo's .gitignore)
 LOG_FILE="$LOG_DIR/latest.log"
 mkdir -p "$LOG_DIR"

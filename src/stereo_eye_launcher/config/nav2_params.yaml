@@ -171,7 +171,7 @@ controller_server:
       cost_scaling_dist: 0.25               # (m) was 0.4
       cost_scaling_gain: 1.0                # unchanged (1.0 = no extra slow-down)
       inflation_cost_scaling_factor: 6.0    # was 4.0; must equal inflation_layer.cost_scaling_factor
-      regulated_linear_scaling_min_radius: 0.9      # (m) curves tighter than this slow down
+      regulated_linear_scaling_min_radius: 0.5      # (m) was 0.9: only curves tighter than this slow down
       # Never slower than this while driving (default 0.25 > our max). 0.08
       # (was 0.05) keeps the robot clearly moving, well above stuck_recovery's
       # min_cmd_speed check and the progress checker.

@@ -5,3 +5,6 @@
 *.sh   text eol=lf
 *.bash text eol=lf
 *.py   text eol=lf
+
+# Patches for third-party code (patches/): keep LF so git apply matches.
+*.patch text eol=lf

@@ -75,6 +75,12 @@ source install/setup.bash
 ./src/stereo_eye_launcher/scripts/run_sim.sh explore:=true gz_gui:=false
 ```
 
+`run_sim.sh` first applies our patches to third-party code (`patches/`, see
+[patches/apply_patches.sh](patches/apply_patches.sh)) and, if a patch is newer
+than the build, rebuilds `explore_lite` by itself. To do it by hand before a
+`colcon build`: `bash patches/apply_patches.sh` (safe to run again; it prints
+`applied now` or `already applied`, or an `ERROR`).
+
 `explore:=true` starts Nav2 and explore_lite, so the robot drives itself.
 `gz_gui:=false` starts only the Gazebo server (no Gazebo window). That avoids
 the WSL GPU running out of memory and taking the whole launch down. RViz still

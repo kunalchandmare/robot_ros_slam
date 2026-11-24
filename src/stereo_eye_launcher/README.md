@@ -662,6 +662,12 @@ by the company network:
 git submodule update --init
 ```
 
+We patch one line of explore_lite (frontier search through inflated
+doorways): `patches/m-explore-ros2/0001-frontier-search-through-inflated-cells.patch`.
+`run_sim.sh` applies it and rebuilds explore_lite when needed; by hand it is
+`bash patches/apply_patches.sh` before building. The patched files do not show
+up in `git status` (`ignore = dirty` in `.gitmodules`).
+
 The normal build then includes it, because `stereo_eye_launcher` depends on it:
 
 ```bash
