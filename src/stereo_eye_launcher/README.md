@@ -92,6 +92,7 @@ Or use the run script, which sources the workspace and launches in one go
 | `steering`     | `true`                                          | Start `rqt_robot_steering` (mouse sliders) |
 | `teleop`       | `false`                                         | Start `teleop_twist_keyboard` in xterm   |
 | `render_engine`| `ogre`                                          | Gazebo render engine, `ogre` or `ogre2`  |
+| `gz_gui`       | `true`                                          | Open the Gazebo window; `false` = server only (sensors still render, RViz still works) |
 | `explore`      | `false`                                         | Explore by itself (Nav2 + explore_lite) and save the map; turns off `steering` and `teleop` |
 | `maps_dir`     | `/workspaces/ros2-dev/src/stereo_eye_launcher/maps` | Where `explore:=true` saves the map |
 | `map_name`     | `apartment`                                     | File name prefix of the saved map        |
@@ -119,6 +120,8 @@ crashes on the WSL D3D12 GPU driver with an Ogre `UnimplementedException` in
 3. **Starts Gazebo** by including `gz_sim.launch.py` with
    `gz_args = "-r -v 1 <world>"` (`-r` runs immediately, `-v 1` keeps Gazebo's messages short)
    and `on_exit_shutdown = true`, so closing Gazebo stops the whole launch.
+   With `gz_gui:=false`, `-s` is added in front (server only, no window);
+   then the launch stops when the Gazebo server stops.
    On Humble/Fortress this starts `ign gazebo`.
 
 4. **Builds the robot description** by running
@@ -544,6 +547,19 @@ slowly (check the real-time factor at the bottom right of Gazebo; close other
 programs or use `rviz:=false`). Publishing the wheel odometry faster
 (`odom_publish_frequency` in `stereo_eye.gazebo.xacro`) would also shrink the
 gap.
+
+**Everything shuts down with `D3D12: Removing Device` or `Out of memory`.**
+On WSL the Gazebo window shares a small amount of GPU memory with the camera
+sensors, and when it runs out Gazebo crashes and takes the whole launch with
+it. Try, in this order:
+
+1. Start without the Gazebo window:
+   `./src/stereo_eye_launcher/scripts/run_sim.sh gz_gui:=false`.
+   The simulation, the cameras and the ToF sensor still run, and RViz still
+   shows the robot, the images and the map. You only lose the Gazebo window.
+2. Free the GPU memory: close the terminals, then in **Windows PowerShell** run
+   `wsl --shutdown`, wait a few seconds, open the container again and restart
+   the launch.
 
 **The map is stuck and does not recover.** First drive slowly towards a place
 with more detail (furniture, corners) for a few seconds. If the map still does

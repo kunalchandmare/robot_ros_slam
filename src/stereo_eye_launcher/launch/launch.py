@@ -138,6 +138,18 @@ def generate_launch_description():
             choices=['ogre', 'ogre2'],
             description='Gazebo render engine for server (camera sensors) and GUI',
         ),
+        # The Gazebo GUI window is optional. On the WSL D3D12 GPU it can run out
+        # of GPU memory ("D3D12: Removing Device", then Ogre "Vertex Buffer:
+        # Out of memory" while creating the GUI render window), which shuts the
+        # whole launch down. gz_gui:=false starts only the Gazebo server: the
+        # world, physics and the camera/ToF sensors still run and render, and
+        # RViz still shows everything; there is just no Gazebo window.
+        DeclareLaunchArgument(
+            'gz_gui',
+            default_value='true',
+            choices=['true', 'false'],
+            description='Open the Gazebo GUI window if true; false = server only (-s)',
+        ),
         # Autonomous frontier exploration: Nav2 + explore_lite drive the robot
         # and explore_map_saver.py saves the 2D map when no frontiers are left.
         DeclareLaunchArgument(
@@ -181,10 +193,23 @@ def generate_launch_description():
     # then execs "ign gazebo") as well as on Harmonic ("gz sim").
     # --render-engine sets the engine for both the server (which renders the
     # camera sensors) and the GUI; see the render_engine argument above.
+    # In ign gazebo 6 it is the same as giving --render-engine-server and
+    # --render-engine-gui; with -s the GUI part is simply unused, so the
+    # sensors still render with the chosen engine.
+    #
+    # gz_gui:=false adds "-s" (server only). gz_sim.launch.py runs one
+    # process either way ("ign gazebo <gz_args>"), and on_exit_shutdown
+    # shuts the whole launch down when that process exits: with the GUI that
+    # is when you close the Gazebo window, with -s it is when the server
+    # stops (Ctrl+C or a crash).
+    gz_server_only_flag = PythonExpression(
+        ["'' if '", LaunchConfiguration('gz_gui'), "'.lower() in ('true', '1') else '-s '"]
+    )
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(gz_sim_launch),
         launch_arguments={
             'gz_args': [
+                gz_server_only_flag,
                 '-r -v 1 --render-engine ',
                 LaunchConfiguration('render_engine'),
                 ' ',

@@ -5,6 +5,7 @@
 #   ./src/stereo_eye_launcher/scripts/run_sim.sh [launch args...]
 #   ./src/stereo_eye_launcher/scripts/run_sim.sh rviz:=false steering:=false
 #   ./src/stereo_eye_launcher/scripts/run_sim.sh explore:=true   # explore by itself, save the map
+#   ./src/stereo_eye_launcher/scripts/run_sim.sh gz_gui:=false   # no Gazebo window (saves GPU memory)
 #
 # What it does:
 #   1. Sources the workspace overlay (/workspaces/ros2-dev/install/setup.bash),
