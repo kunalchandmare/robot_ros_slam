@@ -500,10 +500,13 @@ see the RViz section below if you need to start it by hand.
 `Not enough inliers 0/20` and `quality=0` from `stereo_odometry`, followed by
 `no odometry is provided, image ignored` from `rtabmap`. The launch sets
 `Odom/ResetCountdown` to `1`, so `stereo_odometry` resets itself on the next
-frame after it gets lost. `rtabmap` then starts a new map session and joins it
-to the old map through loop closure when the robot sees a known place again.
+frame after it gets lost. It restarts from where it was plus the wheel
+motion, and `publish_null_when_lost` is `false`, so `rtabmap` keeps adding to
+the same map (see "The explored map disappears" below).
 
-To reset odometry by hand:
+To reset odometry by hand (note: this one restarts at the origin, so rtabmap
+does start a new map, and the old one is hidden until a loop closure joins
+them):
 
 ```bash
 ros2 service call /reset_odom std_srvs/srv/Empty
@@ -511,6 +514,33 @@ ros2 service call /reset_odom std_srvs/srv/Empty
 
 Tip: turn slowly, especially in front of plain walls. Fast turns change the view
 too much between frames, so the stereo matcher finds no features in common.
+
+**The explored map disappears in RViz (and comes back later, or not).**
+Cause: when visual odometry got lost and reset itself, `stereo_odometry`
+used to tell `rtabmap` "odometry restarted" (covariance 9999 on `/odom`).
+`rtabmap` then started a brand-new map session, printing `Odometry is reset
+(identity pose or high variance ...) Increment map id!`. The old map is still
+in memory, but `/map` only shows the current session, so the map seemed to
+vanish, and Nav2's costmap and explore_lite's frontiers shrank with it. The
+old part only came back after a loop closure. Fix (already in `launch.py`):
+`publish_null_when_lost: false` on `stereo_odometry`. Together with the wheel
+odometry guess, a reset now continues from the last pose, so there is only
+one map. If you still see `Increment map id!`, someone called `/reset_odom`
+or the TF tree broke; restart the launch for a clean map.
+It is not an RViz setting: the Map display already uses Reliable + Transient
+Local, which matches rtabmap's latched `/map`.
+
+**Warning `Lookup would require extrapolation into the future` for
+`odom` -> `base_footprint` (about 60 ms).** The wheel position from Gazebo
+(`/wheel_tf`, sent 30 times a second) arrives a little after the camera
+images, so for a moment there is no wheel position yet for the newest image.
+`stereo_odometry` and `rtabmap` wait up to 0.2 s (`wait_for_transform`) and
+Nav2 accepts 0.5 s (`transform_tolerance`), so an occasional warning is
+harmless. If it repeats several times per second, the simulation is running
+slowly (check the real-time factor at the bottom right of Gazebo; close other
+programs or use `rviz:=false`). Publishing the wheel odometry faster
+(`odom_publish_frequency` in `stereo_eye.gazebo.xacro`) would also shrink the
+gap.
 
 **The map is stuck and does not recover.** First drive slowly towards a place
 with more detail (furniture, corners) for a few seconds. If the map still does
@@ -686,10 +716,27 @@ another one. If it is truly wedged, put it back with the
 `set_pose` command in [Troubleshooting](#troubleshooting), and expect the map
 to be off afterwards.
 
+**The robot sits still and the terminal repeats "Goal succeeded".** Before
+the fix, explore_lite sometimes picked a frontier whose centre was right next
+to the robot (for example at a wall the cameras cannot see). The goal was
+"reached" at once (closer than 0.25 m), the frontier stayed, and the same goal
+was sent again every quarter of a second, forever. Now Nav2 uses
+`behavior_trees/explore_navigate_to_pose.xml`, which refuses goals closer than
+0.35 m (`goal_reached_tol`). The goal then fails instead of succeeding, and
+explore_lite blacklists that frontier (red in RViz) and moves on. In the
+terminal you will see `Goal failed` now and then; that is expected. If the
+robot still stands still for minutes, pause and resume exploration:
+
+```bash
+ros2 topic pub --once /explore/resume std_msgs/msg/Bool "{data: false}"
+ros2 topic pub --once /explore/resume std_msgs/msg/Bool "{data: true}"
+```
+
 **Visual odometry got lost.** Signs are `Not enough inliers` from
 `stereo_odometry` and a map that stops growing. Odometry resets itself on the
-next frame, but the map may jump. The robot then usually continues. If the map
-is badly broken, stop and start again.
+next frame and continues from the last position, so the map stays one piece;
+it may shift a little. The robot then usually continues. If the map is badly
+broken, stop and start again.
 
 **Exploration ends too early ("No frontiers found").** This happens when the
 map is still small, or when the frontiers left are smaller than
