@@ -11,8 +11,9 @@
     <plugin filename="ignition-gazebo-scene-broadcaster-system" name="ignition::gazebo::systems::SceneBroadcaster"/>
     <!-- Sensors use Ogre 1 ("ogre"), not Ogre 2. On WSL with the d3d12 GPU driver,
          Ogre 2 crashes Gazebo when the cameras start (GL3PlusTextureGpu::copyTo
-         is not implemented there), while Ogre 1 works. The launcher defaults to
-         --render-engine ogre to match. On a native Linux GPU, ogre2 also works. -->
+         is not implemented there), while Ogre 1 works. The launcher's
+         render-engine option also defaults to ogre to match. On a native
+         Linux GPU, ogre2 also works. -->
     <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
       <render_engine>ogre</render_engine>
     </plugin>

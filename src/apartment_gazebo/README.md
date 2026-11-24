@@ -44,6 +44,15 @@ bathroom from the hallway.
 - **Bed** in the bedroom, against the south wall
 - **Vanity** in the north-west corner of the bathroom
 
+Each piece of furniture has a fine, high-contrast texture so a stereo
+camera can measure depth on it (plain one-colour boxes have nothing to
+match): blue tweed fabric with flecks on the sofa, walnut wood grain on
+the coffee table, speckled terrazzo on the kitchen counter, a cream quilted
+duvet with small coloured dots on the bed and grey-blue marble on the
+vanity. Only the look changed. Sizes, positions and collisions are exactly
+as before. Each texture is a small PNG image (about 450 KB for all five) in
+that model's `materials/textures/` folder.
+
 ### Textured walls and floor (for camera SLAM)
 
 Plain one-colour walls give a stereo camera almost nothing to match, so
