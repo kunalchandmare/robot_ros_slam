@@ -23,6 +23,24 @@ set -eo pipefail
 # ROS setup scripts read unset variables, so source them before any "set -u".
 source /workspaces/ros2-dev/install/setup.bash
 
+# --- Known-bad tf2 version ----------------------------------------------------
+# ros-humble-tf2 / tf2-ros 0.25.23 (Humble sync of Sept 2026) has a deadlock
+# between waitForTransform and testTransformableRequests (ros2/geometry2 #990,
+# fixed in 0.25.24). Nav2's costmaps (obstacle layer message filters) hit it
+# within seconds: their TF stops updating, and every FollowPath goal fails
+# with "Lookup would require extrapolation into the future. Requested time
+# 1.66 ..." (always the same numbers), so the robot never drives. Only a
+# warning; the fix is an apt upgrade (see README, "Nav2 never drives").
+for pkg in ros-humble-tf2 ros-humble-tf2-ros; do
+  ver="$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null || true)"
+  case "$ver" in
+    0.25.23*)
+      echo "WARNING: $pkg $ver has a TF deadlock: Nav2 will not drive." >&2
+      echo "         Fix: sudo apt update && sudo apt install --only-upgrade 'ros-humble-tf2*'  (needs 0.25.24 or newer)" >&2
+      ;;
+  esac
+done
+
 # --- Where the log goes ------------------------------------------------------
 # <repo> is the git repository root. Ask git first (works from the source
 # folder and from an installed copy inside the workspace); if git is missing

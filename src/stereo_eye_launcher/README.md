@@ -1015,6 +1015,35 @@ grows, and restarts exploration. If you see `try 3 of 3` followed by
 `saving it anyway`, the cameras did not build a map while turning: check
 `/map` in RViz and the `stereo_odometry` lines (`quality=0` means it is lost).
 
+**Nav2 never drives: every goal fails with "extrapolation into the future".**
+The terminal shows, again and again with *the same* numbers:
+
+```text
+[controller_server]: Exception in transformPose: Lookup would require extrapolation
+  into the future.  Requested time 1.660000 but the latest data is at time 1.600000,
+  when looking up transform from frame [odom] to frame [map]
+[controller_server]: Unable to transform robot pose into global plan's frame
+[controller_server]: Controller patience exceeded
+```
+
+Paths are planned, but the robot does not move. Numbers that never change
+while the simulation runs mean that Nav2's TF has frozen: it stopped taking in
+new transforms a second or two after start. TF itself is fine
+(`ros2 run tf2_ros tf2_echo map odom` shows the time going up). Another sign:
+on Ctrl+C, `planner_server` and `controller_server` "failed to terminate" and
+get killed. The cause is a bug in the installed tf2 version **0.25.23**
+(Humble update of September 2026): two threads in the costmap lock each other
+out for good (fixed in 0.25.24, ros2/geometry2 #990). `run_sim.sh` warns at
+start if it finds that version. Check and fix inside the container:
+
+```bash
+dpkg -l 'ros-humble-tf2*' | grep 0.25.23   # any line here = affected
+sudo apt update && sudo apt install --only-upgrade 'ros-humble-tf2*'
+```
+
+Changing `transform_tolerance` does not help: it only says how long to wait
+for a transform, and a frozen TF never delivers one.
+
 **Exploration ends too early ("No frontiers found").** This happens when the
 map is still small, or when the frontiers left are smaller than
 `min_frontier_size` (0.3 m in `config/explore_params.yaml`; it was 0.75 m for
