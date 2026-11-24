@@ -70,7 +70,7 @@ graph TD
 | `left_wheel_link` / `right_wheel_link` | y = ±0.095, rpy (−π/2, 0, 0), axis z | Drive wheels. The rotation makes both wheel z-axes point to +y, so a positive joint velocity drives forward on both sides |
 | `caster_link` | x = −0.075, z = −0.0475 (sphere touches the ground) | Rear support ball (fixed; low friction μ = 0.01 in Gazebo) |
 | `front_caster_link` | x = +0.075, z = −0.0475 (sphere touches the ground) | Front support ball / skid (fixed; same size and μ = 0.01). Stops the robot pitching onto its face |
-| `front_tof_link` | x = +0.1145, z = −0.010 in `base_link` (optical centre 5.5 cm above the ground) | Short-range ToF. Origin is the optical centre at the front face of a 2.0 × 2.4 × 1.6 cm housing, 2 mm in front of the front caster, looking straight ahead |
+| `front_tof_link` | x = +0.1175, z = −0.010 in `base_link` (optical centre 5.5 cm above the ground, 3 mm in front of the housing face) | Short-range ToF. Origin is the optical centre, 3 mm in front of a 2.0 × 2.4 × 1.6 cm housing that sits 2 mm in front of the front caster. Housing and window sit fully behind the origin. Looks straight ahead. |
 | `ballast_link` | x = −0.025, z = −0.010 in `base_link` (5.5 cm above the ground) | Internal 2.40 kg battery pack on the torso floor (no visual or collision; it sits inside the shell) |
 | `imu_link` | z = +0.01, on the axle centreline | IMU mounting point, near the rotation centre to reduce centripetal acceleration |
 | `head_link` | z = +0.1925 | Head bar with the eye, cheeks, ears and antennas; head collision box and head mass |
@@ -172,27 +172,40 @@ At 0.30 m the two overlap from about 0.17 m to 0.30 m; only a thin sliver around
 becoming trustworthy. Raise `tof_max_range` in the xacro (and regenerate the URDF) if you
 want the feeler to reach further.
 
-**Min and max range.** `tof_min_range` (0.02 m) is the closest reading the sensor will
-report: closer than that is treated as invalid, and it is also larger than the housing
-depth in front of the optical origin (which is zero: the origin is the front face), so
-the first gpu_lidar ray cannot hit the ToF's own collision. `tof_max_range` (0.30 m) is
-the farthest it will report; nothing beyond that is seen by this sensor.
+**Min and max range.** `tof_min_range` (0.01 m) is the closest reading the sensor will
+report: closer than that is treated as invalid. `tof_max_range` (0.30 m) is the farthest
+it will report; nothing beyond that is seen by this sensor.
 
-The beam is a 5-ray fan, 25 deg wide (about +/- 0.218 rad), one vertical sample, aimed
-straight ahead (zero pitch) from 5.5 cm above the ground. A level ray at that height
-cannot hit the floor inside 0.30 m (it would need a downward pitch of at least
-atan(0.055/0.30) ~ 10 deg). The housing sits 2 mm in front of the front caster, and
-everything else (casters, wheels, torso) is behind the optical origin, so the fan also
-clears the robot's own body. Horizontal and vertical sample counts, the FOV and both
-range limits are xacro properties (`tof_h_samples`, `tof_v_samples`, `tof_hfov`,
-`tof_min_range`, `tof_max_range`).
+**Fake min-range readings.** ign-sensors6 `Lidar::Clamp` raises every *finite* range
+below min up to exactly `range_min` (it leaves +/-inf alone). On the ogre1 (Fortress)
+`gpu_lidar`, a no-hit first-pass pixel is supposed to be +inf, but the second-pass
+target is cleared to 0.0, and a 1-row, few-sample point mesh can miss a pixel and
+write that 0. A self-hit on the sensor's own visual does the same if it comes back
+as a finite 0. Either way the published scan is a wall at `range_min` even in open
+space, which used to trip false TOO CLOSE recoveries. Two model-side fixes: the
+optical origin is 3 mm in front of the housing face, and every housing/window visual
+and collision sits fully behind that origin (the window used to be a 2 mm cylinder
+centred on the face, so 1 mm stuck out). And the scan is 11 horizontal samples over
+25 deg plus 3 vertical samples over +/- 1 deg, so a single bad pixel is less likely
+to pin the whole feeler. Downstream should still treat a reading at or below
+`range_min` as invalid, not as a real obstacle.
+
+The beam is aimed straight ahead (zero pitch) from 5.5 cm above the ground. The
+lowest ray, at -1 deg, drops only 0.30*tan(1 deg) ~ 5 mm at max range, so it still
+clears the floor by about 5.0 cm (it would need a downward pitch of at least
+atan(0.055/0.30) ~ 10 deg to hit the ground). The housing sits 2 mm in front of the
+front caster; the optical origin is 3 mm in front of the housing, and everything
+else (casters, wheels, torso) is behind that origin, so the fan also clears the
+robot's own body. Horizontal and vertical sample counts, both FOVs and both range
+limits are xacro properties (`tof_h_samples`, `tof_v_samples`, `tof_hfov`,
+`tof_vfov`, `tof_min_range`, `tof_max_range`).
 
 | Quantity | Value |
 |---|---|
 | Housing | 2.0 x 2.4 x 1.6 cm, 0.02 kg, dark box with a sky-blue window |
-| Optical origin in `base_footprint` | (0.1145, 0, 0.055) m, x forward, no pitch. Housing occupies x = 0.0945-0.1145 m, z = 0.047-0.063 m |
-| Scan | gpu_lidar, 20 Hz, 5 horizontal samples over 25 deg, 1 vertical sample at 0 |
-| Range | 0.02-0.30 m (`tof_min_range` / `tof_max_range`) |
+| Optical origin in `base_footprint` | (0.1175, 0, 0.055) m, x forward, no pitch, 3 mm in front of the housing face. Housing occupies x = 0.0945-0.1145 m, z = 0.047-0.063 m. Window is on the front face, entirely behind the origin. |
+| Scan | gpu_lidar, 20 Hz, 11 horizontal samples over 25 deg, 3 vertical samples over +/- 1 deg |
+| Range | 0.01-0.30 m (`tof_min_range` / `tof_max_range`) |
 | gz topic | **`/front_tof`** (absolute, set at sensor level). ign-sensors6 also publishes **`/front_tof/points`**. |
 | gz messages | `ignition.msgs.LaserScan` on `/front_tof`; `ignition.msgs.PointCloudPacked` on `/front_tof/points` |
 | ROS bridge (Humble `ros_gz_bridge`) | `/front_tof@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan` (or `ignition.msgs.LaserScan`; Humble accepts both). Optional points: `/front_tof/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked`. |
@@ -259,7 +272,7 @@ comes into view about 0.50 m in front of the robot. Full stereo design, topics a
 1. **Argument**: `use_gazebo` (default `true`), which includes the optional Gazebo file.
 2. **Properties**: every dimension in one place: `wheel_radius`, `wheel_width`, `wheel_separation`, `torso_x/y/z`,
    `torso_r`, `torso_off_x`, `ground_clear`, `head_x`, `head_core_y`, `head_z`, `neck_r/h`, `cap_h`, eye sizes (`eye_half`, `rim_r`, `bezel_r`, `glass_r`, `lens_r`, `eye_z`),
-   camera (`stereo_baseline`, `cam_w`, `cam_h`, `cam_fps`, `cam_hfov`, `cam_near`, `cam_far`; `cam_fx`, `cam_cx`, `cam_cy`, `cam_tx_right` are **derived**), casters (`caster_r`, `caster_x`, `front_caster_x`), ToF (`tof_x/y/z`, `tof_min_range`, `tof_max_range`, `tof_hfov`, `tof_h_samples`, `tof_v_samples`, `tof_fps`, `tof_height`) and ballast (`ballast_mass`, `ballast_x/y/z`, `ballast_off_x`), and masses.
+   camera (`stereo_baseline`, `cam_w`, `cam_h`, `cam_fps`, `cam_hfov`, `cam_near`, `cam_far`; `cam_fx`, `cam_cx`, `cam_cy`, `cam_tx_right` are **derived**), casters (`caster_r`, `caster_x`, `front_caster_x`), ToF (`tof_x/y/z`, `tof_standoff`, `tof_min_range`, `tof_max_range`, `tof_hfov`, `tof_vfov`, `tof_h_samples`, `tof_v_samples`, `tof_fps`, `tof_height`) and ballast (`ballast_mass`, `ballast_x/y/z`, `ballast_off_x`), and masses.
    Derived heights (`torso_cz`, `torso_top`, `head_cz`, `cam_front_x`) are computed, so the stack stays connected when you change a size.
 3. **Materials**: the 8 colours above.
 4. **Inertial macros**: `box_inertial`, `cylinder_inertial`, `sphere_inertial` (mass + dimensions + origin block).
@@ -285,7 +298,7 @@ simulator-agnostic. It declares:
 |---|---|
 | `stereo_left`, `stereo_right` camera sensors | On `camera_left_link` / `camera_right_link`: 640×360, 24 Hz (same rate, so same stamps), HFOV 1.5, clip 0.05–15 m, Gaussian noise σ 0.005, identical lens intrinsics + projection (right Tx = −27.48), topics `stereo/{left,right}/image_raw` + `stereo/{left,right}/camera_info`; frame = the optical frame via both `<ignition_frame_id>` (Fortress, ign-sensors 6.2+) and `<gz_frame_id>` (Garden/Harmonic) |
 | `imu_sensor` | On `imu_link` (both frame tags), 100 Hz, topic `imu`, gyro σ 0.0009 rad/s, accel σ 0.017 m/s² |
-| `front_tof` | gpu_lidar on `front_tof_link`, 20 Hz, 5 samples over 25 deg, range 0.02-0.30 m, topic `/front_tof` (LaserScan) plus `/front_tof/points`. Both frame tags = `front_tof_link`. Driven by the existing Sensors system (ogre). |
+| `front_tof` | gpu_lidar on `front_tof_link`, 20 Hz, 11 x 3 samples (25 deg H, +/- 1 deg V), range 0.01-0.30 m, topic `/front_tof` (LaserScan) plus `/front_tof/points`. Optical origin 3 mm in front of the housing. Both frame tags = `front_tof_link`. Driven by the existing Sensors system (ogre). |
 | DiffDrive plugin | `left/right_wheel_joint`, separation 0.19, radius 0.065, limits ±0.3 m/s, ±1.0 rad/s, ±0.5 m/s², ±1.5 rad/s²; `cmd_vel` → `odom` + `wheel_tf` (odom → base_footprint) at **50 Hz**. On gz (Fortress / ign-gazebo6) the absolute topic names are `/odom` and `/wheel_tf` (relative plugin names, not scoped under `/model/stereo_eye/`) |
 | JointStatePublisher plugin | Publishes both wheel joints on `joint_states` |
 

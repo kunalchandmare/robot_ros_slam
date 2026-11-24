@@ -95,24 +95,39 @@
        the stereo cameras. Max range defaults to 0.30 m so it overlaps the cameras'
        unreliable near band (~0.17-0.35 m) and covers the last few centimetres the
        stereo cannot trust. Raise tof_max_range if you want a longer feeler.
-       The link origin is the optical centre at the FRONT FACE of the housing, so
-       the first ray is already outside the box (min range 0.02 m > 0). Pitch is
-       zero and there is one vertical sample, so a 0.30 m beam at this height
-       cannot hit the floor, the casters or the body (all of which sit behind
-       or below the origin). -->
+
+       The link origin is the optical centre, tof_standoff (3 mm) in FRONT of the
+       housing face. Every visual and collision of the housing and window sits
+       fully behind that origin, with the 3 mm air gap as clear margin, so no
+       robot geometry is in front of the origin or inside min range. This avoids
+       a self-hit: ign-rendering6 ogre1 GpuRays renders scene visuals (it does
+       not skip the parent link or model), and the window used to be a 2 mm
+       cylinder centred on the front face, so 1 mm stuck out past the origin.
+
+       tof_min_range is 0.01 m (was 0.02). ign-sensors6 Lidar::Clamp raises every
+       finite range below min up to range_min, so a 0.0 empty pixel or a self-hit
+       at 0 was published as exactly 0.02 m and looked like a wall in open space.
+
+       The scan is 11 horizontal samples over 25 deg and 3 vertical samples over
+       +/- 1 deg so a single bad ogre1 pixel cannot dominate. The downward ray
+       at -1 deg drops only 0.30*tan(1 deg) ~ 5 mm from 5.5 cm height, so it
+       still clears the floor (and the casters, which are behind the origin). -->
   <xacro:property name="tof_x"         value="0.020"/>
   <xacro:property name="tof_y"         value="0.024"/>
   <xacro:property name="tof_z"         value="0.016"/>
   <xacro:property name="tof_mass"      value="0.02"/>
-  <xacro:property name="tof_min_range" value="0.02"/>
+  <xacro:property name="tof_min_range" value="0.01"/>
   <xacro:property name="tof_max_range" value="0.30"/>  <!-- metres; change this to lengthen the feeler -->
   <xacro:property name="tof_hfov"      value="0.4363323129985824"/>  <!-- 25 deg; rays at +/- 0.218 rad -->
-  <xacro:property name="tof_h_samples" value="5"/>
-  <xacro:property name="tof_v_samples" value="1"/>
+  <xacro:property name="tof_vfov"      value="0.03490658503988659"/>  <!-- 2 deg total, +/- 1 deg -->
+  <xacro:property name="tof_h_samples" value="11"/>
+  <xacro:property name="tof_v_samples" value="3"/>
   <xacro:property name="tof_fps"       value="20"/>
-  <xacro:property name="tof_height"    value="0.055"/>  <!-- optical centre above the ground, level beam -->
-  <!-- origin = front face, 2 mm past the front caster so the housing does not overlap it -->
-  <xacro:property name="tof_off_x"     value="${front_caster_x + caster_r + 0.002 + tof_x}"/>
+  <xacro:property name="tof_height"    value="0.055"/>  <!-- optical centre above the ground -->
+  <xacro:property name="tof_standoff"  value="0.003"/>  <!-- optical origin this far in front of the housing face -->
+  <xacro:property name="tof_window_len" value="0.002"/>
+  <!-- joint = optical origin: housing front + standoff, 2 mm past the front caster -->
+  <xacro:property name="tof_off_x"     value="${front_caster_x + caster_r + 0.002 + tof_x + tof_standoff}"/>
   <!-- joint is in base_link (axle height = wheel_radius) -->
   <xacro:property name="tof_off_z"     value="${tof_height - wheel_radius}"/>
 
@@ -409,26 +424,32 @@
   </joint>
   <xacro:gazebo_ode_contact link="front_caster_link" mu="0.01"/>
 
-  <!-- Front ToF housing. Link origin is the optical centre at the front face
-       (x forward), so gpu_lidar rays start outside the box. The housing (visual,
-       collision and inertia) sits behind that origin. -->
+  <!-- Front ToF housing. Link origin is the optical centre, tof_standoff in
+       front of the housing face (x forward). The housing box, window and
+       collision all sit behind that origin with the standoff as clear
+       margin: no visual or collision crosses x = 0 or sits inside min range.
+       Inertia stays centred on the housing, so the 3 mm origin shift does
+       not move the mass in the world. -->
   <link name="front_tof_link">
     <visual name="tof_housing">
-      <origin xyz="${-tof_x/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="${-(tof_standoff + tof_x/2)} 0 0" rpy="0 0 0"/>
       <geometry><box size="${tof_x} ${tof_y} ${tof_z}"/></geometry>
       <material name="se_dark"/>
     </visual>
+    <!-- Window is a 2 mm cylinder on the front face, entirely behind the origin
+         (centre at -(standoff + half length), so it occupies
+         [-(standoff+len), -standoff]). -->
     <visual name="tof_window">
-      <origin xyz="0 0 0" rpy="0 ${PI/2} 0"/>
-      <geometry><cylinder radius="0.006" length="0.002"/></geometry>
+      <origin xyz="${-(tof_standoff + tof_window_len/2)} 0 0" rpy="0 ${PI/2} 0"/>
+      <geometry><cylinder radius="0.006" length="${tof_window_len}"/></geometry>
       <material name="se_sky"/>
     </visual>
     <collision>
-      <origin xyz="${-tof_x/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="${-(tof_standoff + tof_x/2)} 0 0" rpy="0 0 0"/>
       <geometry><box size="${tof_x} ${tof_y} ${tof_z}"/></geometry>
     </collision>
     <xacro:box_inertial m="${tof_mass}" x="${tof_x}" y="${tof_y}" z="${tof_z}">
-      <origin xyz="${-tof_x/2} 0 0" rpy="0 0 0"/>
+      <origin xyz="${-(tof_standoff + tof_x/2)} 0 0" rpy="0 0 0"/>
     </xacro:box_inertial>
   </link>
   <joint name="front_tof_joint" type="fixed">
