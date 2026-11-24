@@ -57,8 +57,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # explore_lite (frontier exploration) has no apt package for Humble, so build it
 # from source into its own small workspace /opt/explore_ws, pinned to a known commit.
 # Only explore_lite and its message package are built (map_merge is skipped).
+# ca-certificates: git (installed with --no-install-recommends) does not pull it in,
+# and without it "git clone https://..." fails with "server certificate verification failed".
 ARG M_EXPLORE_COMMIT=326cf8a0b487c34246bb8f3326afbcd69576dc60
-RUN mkdir -p /opt/explore_ws/src && cd /opt/explore_ws/src \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /opt/explore_ws/src && cd /opt/explore_ws/src \
     && git clone https://github.com/robo-friends/m-explore-ros2.git \
     && cd m-explore-ros2 && git checkout ${M_EXPLORE_COMMIT} \
     && cd /opt/explore_ws \
