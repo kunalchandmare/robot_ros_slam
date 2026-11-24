@@ -251,6 +251,11 @@ def generate_launch_description():
             '/wheel_tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V',
             '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
             '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
+            # Front bumper contact sensor (stereo_eye.gazebo.xacro, MechaX).
+            # Gazebo only publishes while the plate touches something, and
+            # only if the world loads the Contact system; without either this
+            # line is harmless (no messages). Read by stuck_recovery.py.
+            '/bumper@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts',
         ],
         remappings=[
             ('/odom', '/wheel_odom'),
@@ -611,8 +616,8 @@ def generate_launch_description():
     # asking to drive while visual odometry (/odom) does not move, then makes
     # explore_lite give up that frontier, backs up 0.2 m, turns ~90 degrees
     # and lets exploration continue. All thresholds are parameters of the node
-    # (see the header of scripts/stuck_recovery.py). The bumper topic is not
-    # bridged yet: it waits for MechaX's Gazebo contact sensor (README).
+    # (see the header of scripts/stuck_recovery.py). /bumper comes from the
+    # bridge above; the world must load Gazebo's Contact system (README).
     stuck_recovery = Node(
         package='stereo_eye_launcher',
         executable='stuck_recovery.py',

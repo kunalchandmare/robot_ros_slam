@@ -706,19 +706,23 @@ It then:
 After a recovery it waits 10 s before it reacts again. All numbers are
 parameters of the node; see the top of `scripts/stuck_recovery.py`.
 
-**Bumper (needs MechaX).** The bumper part only works once the robot model has
-a Gazebo contact sensor on a front bumper and its topic is bridged to ROS. Until
-then the node simply never sees a contact, and only the "pushing without
-moving" check works. What is needed:
+**Bumper.** MechaX added a thin front bumper plate with a Gazebo contact
+sensor (`front_bumper_link`, Gazebo topic `/bumper`, `ignition.msgs.Contacts`;
+see the `stereo_eye` README). `launch.py` bridges it to ROS as
+`/bumper` (`ros_gz_interfaces/msg/Contacts`), and `stuck_recovery` treats any
+contact as "stuck". One piece is still missing: **the world must load Gazebo's
+Contact system**, otherwise the sensor never publishes (Isekai owns
+`apartment.sdf`):
 
-- in `stereo_eye.gazebo.xacro`: a `contact` sensor on a front bumper collision
-  that does not touch the floor, plus the world's Contact system plugin
-  (`ignition-gazebo-contact-system` on Fortress), publishing for example on the
-  Gazebo topic `/bumper`;
-- in `launch.py`, one bridge line (not added yet because the topic name is not
-  final): `'/bumper@ros_gz_interfaces/msg/Contacts[gz.msgs.Contacts'`;
-- if the topic or message type differs, set the `stuck_recovery` parameters
-  `bumper_topic` and `bumper_type` (`contacts`, `bool` or `none`).
+```xml
+<plugin filename="ignition-gazebo-contact-system" name="ignition::gazebo::systems::Contact"/>
+```
+
+Until then only the "pushing without moving" check works. To test the bumper,
+drive the robot into a wall by hand (without `explore:=true`) and run
+`ros2 topic echo /bumper`. If the topic or message type ever changes, set the
+`stuck_recovery` parameters `bumper_topic` and `bumper_type` (`contacts`,
+`bool` or `none`).
 
 ### Where the map is saved
 
@@ -835,8 +839,8 @@ good enough, then stop the launch.
   cameras is seen, and nothing behind or beside the robot. Obstacles that
   appear inside that zone (or were never seen from further away) are only
   caught by the bumper or the stuck check.
-- **No bumper yet.** Until MechaX adds the contact sensor, being stuck is only
-  detected from "pushing without moving", which takes about 2 s.
+- **Bumper needs the world's Contact system.** Until `apartment.sdf` loads it,
+  being stuck is only detected from "pushing without moving" (about 2 s).
 - **Low obstacles and table tops.** The map only counts things between 5 cm
   and 40 cm high (`Grid/MaxGroundHeight`, `Grid/MaxObstacleHeight`). Very low
   objects are missed; the robot may drive under tables.
